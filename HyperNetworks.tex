@@ -1,0 +1,1254 @@
+\documentclass[a4paper]{article}
+\usepackage{hyperref}
+\hypersetup{
+  pdfinfo={
+    Title={HyperNetworks},
+    Author={Andrew Dai and Quoc V. L}
+  }
+}
+\usepackage{pdfpages}
+\usepackage{comment}
+%
+%\begin{document}
+%\includepdf[pages=1-29]{HyperNetworkBase.pdf}
+%\end{document}
+
+%\begin{comment}
+\documentclass{article} % For LaTeX2e
+\usepackage{iclr2017_conference,times}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{mathtools}
+\usepackage{tikz}
+\usepackage{subcaption}
+\usepackage{circuitikz}
+\usepackage{amssymb}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{footmisc}
+
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{multirow}
+\usepackage{verbatim}
+\usepackage{pdfpages}
+\usepackage{afterpage}
+
+\usepackage{listings}
+\lstset{
+basicstyle=\small\ttfamily,
+extendedchars=true,
+breaklines=true
+}
+
+\usepackage[usenames, dvipsnames]{color}
+\definecolor{color1}{RGB}{204,0,0}
+\definecolor{color2}{RGB}{0,153,0}
+\definecolor{color3}{RGB}{0,102,204}
+\definecolor{color4}{RGB}{255,204,0}
+
+\title{HyperNetworks}
+
+
+\author{David Ha\thanks{Work done as a member of the Google Brain Residency program (\url{g.co/brainresidency}).}, ~Andrew Dai, ~Quoc V. Le \\
+Google Brain \\
+\texttt{\{hadavid,adai,qvl\}@google.com} \\
+}
+
+
+
+% The \author macro works with any number of authors. There are two
+% commands used to separate the names and addresses of multiple
+% authors: \And and \AND.
+%
+% Using \And between authors leaves it to LaTeX to determine where to
+% break the lines. Using \AND forces a line break at that point. So,
+% if LaTeX puts 3 of 4 authors names on the first line, and the last
+% on the second line, try using \AND instead of \And before the third
+% author name.
+
+
+\begin{document}
+
+\documentclass{article} % For LaTeX2e
+\usepackage{iclr2017_conference,times}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{mathtools}
+\usepackage{tikz}
+\usepackage{subcaption}
+\usepackage{circuitikz}
+\usepackage{amssymb}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{footmisc}
+
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{multirow}
+\usepackage{tcolorbox}
+\usepackage{verbatim}
+\usepackage{pdfpages}
+\usepackage{afterpage}
+
+\usepackage[T1]{fontenc} % recommended for languages with accents
+\usepackage[utf8]{inputenc}
+
+\usepackage{listings}
+\lstset{
+basicstyle=\small\ttfamily,
+extendedchars=true,
+breaklines=true
+}
+
+\usepackage[usenames, dvipsnames]{color}
+\definecolor{color1}{RGB}{204,0,0}
+\definecolor{color2}{RGB}{0,153,0}
+\definecolor{color3}{RGB}{0,102,204}
+\definecolor{color4}{RGB}{255,204,0}
+
+\title{HyperNetworks}
+
+
+\author{David Ha\thanks{Work done as a member of the Google Brain Residency program (\url{g.co/brainresidency}).}, ~Andrew Dai, ~Quoc V. Le \\
+Google Brain \\
+\texttt{\{hadavid,adai,qvl\}@google.com} \\
+}
+
+
+
+% The \author macro works with any number of authors. There are two
+% commands used to separate the names and addresses of multiple
+% authors: \And and \AND.
+%
+% Using \And between authors leaves it to LaTeX to determine where to
+% break the lines. Using \AND forces a line break at that point. So,
+% if LaTeX puts 3 of 4 authors names on the first line, and the last
+% on the second line, try using \AND instead of \And before the third
+% author name.
+
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+ This work explores hypernetworks: an approach of using a one network, also known as a hypernetwork, to generate the weights for another network. Hypernetworks provide an abstraction that is similar to what is found in nature: the relationship between a genotype -- the hypernetwork -- and a phenotype -- the main network. Though they are also reminiscent of HyperNEAT in evolution, our hypernetworks are trained end-to-end with backpropagation and thus are usually faster.  The focus of this work is to make hypernetworks useful for deep convolutional networks and long recurrent networks, where hypernetworks can be viewed as relaxed form of weight-sharing across layers. Our main result is that hypernetworks can generate non-shared weights for LSTM and achieve near state-of-the-art results on a variety of sequence modelling tasks including character-level language modelling, handwriting generation and neural machine translation, challenging the weight-sharing paradigm for recurrent networks.  Our results also show that hypernetworks applied to convolutional networks still achieve respectable results for image recognition tasks compared to state-of-the-art baseline models while requiring fewer learnable parameters.
+\end{abstract}
+
+\section{Introduction}
+%Neural networks have achieved great success in learning representations for image recognition~\citep{lecun1998gradient,krizhevsky2012imagenet}, speech recognition~\citep{hinton2012deep}, and language understanding~\citep{sutskever2014sequence,bahdanau2014neural}. Central to this success is the concept of weight-sharing~\citep{fukushima1980neocognitron,elman1990finding}, which is often found in convolutional nets and recurrent nets. Though it has been successful, weight-sharing is sometimes inflexible for certain applications.
+
+%also limits their potential applications in domains where no prior knowledge is available, and weight-sharing cannot be easily applied. 
+
+In this work, we consider an approach of using a small network (called a ``hypernetwork") to generate the weights for a larger network (called a main network). The behavior of the main network is the same with any usual neural network: it learns to map some raw inputs to their desired targets;  whereas the hypernetwork takes a set of inputs that contain information about the structure of the weights and generates the weight for that layer (see Figure~\ref{figure:hyperff}).
+
+\begin{figure}[!htb]
+%\vskip 0.2in
+\begin{center}
+\centerline{\includegraphics[width=0.7\columnwidth]{figure/hyperff.eps}}
+\caption{A hypernetwork generates the weights for a feedforward network. Black connections and parameters are associated the main network whereas orange connections and parameters are associated with the hypernetwork.}
+\label{figure:hyperff}
+\end{center}
+\vskip -0.2 in
+\end{figure} 
+
+HyperNEAT~\citep{stanley2009hypercube} is an example of hypernetworks where the inputs are a set of virtual coordinates for each weight in the main network.  In this work, we will focus on a more powerful approach where the input is an embedding vector that describes the entire weights of a given layer.  Our embedding vectors can be fixed parameters that are also learned during end-to-end training, allowing approximate weight-sharing within a layer and across layers of the main network.  In addition, our embedding vectors can also be \textit{generated} dynamically by our hypernetwork, allowing the weights of a recurrent network to change over timesteps and also adapt to the input sequence.
+
+%Meanwhile a hypernetwork takes an embedding of a layer in a network plus other information about the weights and generates the weights for that layer (see Figure~\ref{figure:hyperff}).
+
+%HyperNEAT is a specific example of a hypernetwork that generates weights from the weight coordinates, our approach abstracts away the traditional coordinate systems associated with weight-sharing within a layer, and across layers. It therefore can learn to approximate weight-sharing within a layer and across layers if that is required.
+
+%\textit{DH Note:  The last Since our main approach is to not use the weight coordinates method, but an embedding vector instead, which is superior, I feel we should downplay the use of 'weight coordinates' in the introduction.}
+%Our approach has some similarity to HyperNEAT~\citep{stanley2009hypercube} in evolution where a parent network is used to specify the configuration of a main network. The main difference between hypernetworks and HyperNEAT is that hypernetworks in our approach are trained by gradient descent and backpropagation instead of heuristic search. It is thus less general but faster and more practical than HyperNEAT. 
+
+
+% might want to change the paragraph if we are focused on the embedding vector approach, rather than the coordinate approach.  Also changed the appendix 'experiment' around.
+
+We perform experiments to investigate the behaviors of hypernetworks in a range of contexts and find that hypernetworks mix well with other techniques such as batch normalization and layer normalization.  Our main result is that hypernetworks can generate non-shared weights for LSTM that work better than the standard version of LSTM~\citep{lstm}. On language modelling tasks with Character Penn Treebank, Hutter Prize Wikipedia datasets, hypernetworks for LSTM achieve near state-of-the-art results. On a handwriting generation task with IAM handwriting dataset, Hypernetworks for LSTM achieves high quantitative and qualitative results.  On image classification with CIFAR-10, hypernetworks, when being used to generate weights for a deep convnet~\citep{le1990handwritten}, obtain respectable results compared to state-of-the-art models while having fewer learnable parameters.  In addition to simple tasks, we show that Hypernetworks for LSTM offers an increase in performance for large, production-level neural machine translation models.  
+
+\section{Motivation and Related Work}
+
+Our approach is inspired by methods in evolutionary computing, where it is difficult to directly operate in large search spaces consisting of millions of weight parameters.  A more efficient method is to evolve a smaller network to generate the structure of weights for a larger network, so that the search is constrained within the much smaller weight space. An instance of this approach is the work on the HyperNEAT framework~\citep{stanley2009hypercube}. In the HyperNEAT framework, Compositional Pattern-Producing Networks (CPPNs) are evolved to define the weight structure of much larger main network. %, which are special types of neural networks and designed for specific problems. 
+%In HyperNEAT, it is also typical to evolve both the structure of CPPNs and their weights.
+Closely related to our approach is a simplified variation of HyperNEAT, where the structure is fixed and the weights are evolved through Discrete Cosine Transform (DCT) is called Compressed Weight Search~\citep{koutnik2010evolving}. Even more closely related to our approach are Differentiable Pattern Producing Networks (DPPNs), where the structure is evolved but the weights are learned~\citep{fernando2016convolution}, and ACDC-Networks \citep{acdc}, where linear layers are compressed with DCT and the parameters are learned. 
+%Also related to our approach is the idea of Compressed Weight Search: approximating a large weight matrix by Discrete Cosine Transform coefficients. The search is then constrained over the coefficients of the DCT and therefore more efficient.
+
+%generating large weight matrix from Discrete Cosine Transform basis functions are proposed by the Compressed Weight Search framework~\citep{koutnik2010evolving}.
+
+Most reported results using these methods, however, are in small scales, perhaps because they are both slow to train and require heuristics to be efficient. The main difference between our approach and HyperNEAT is that hypernetworks in our approach are trained end-to-end with gradient descent together with the main network, and therefore are more efficient. 
+
+In addition to end-to-end learning with gradient descent, our approach strikes a good balance between Compressed Weight Search and HyperNEAT in terms of model flexibility and training simplicity. First, it can be argued that Discrete Cosine Transform used in Compressed Weight Search may be too simple and using the DCT prior may not be suitable for many problems. Second, even though HyperNEAT is more flexible, evolving both the architecture and the weights in HyperNEAT is often an overkill for most practical problems.
+
+%Even before the work on HyperNEAT and DCT,~\cite{schmidhuber1992learning,self_referential_weight_matrix} has suggested the concept of fast weights as thought exercises in which one network can produce context-dependent weight changes for a second network. Despite its appeal, the concept however was mentioned mainly as thought exercises, and little empirical evidence was shown to demonstrate its promises. A notable exception is the experiments in~\citep{gomez2005evolving}, where a generator network is learnt through evolution to solve an artificial control problem. The concept of a network interacting with another network is central to the work of~\citep{synthetic_gradients,learning_to_learn}, and especially \citep{predicting_param_deep_learning,deep_fried_convnets,lu2016learnnet,de2016dynamic}, where certain parameters in a convolutional network are predicted by another network. These studies however did not explore the use of this approach to recurrent networks, which is a main contribution of our work.
+
+Even before the work on HyperNEAT and DCT,~\cite{schmidhuber1992learning,self_referential_weight_matrix} has suggested the concept of fast weights in which one network can produce context-dependent weight changes for a second network.  Small scale experiments were conducted to demonstrate fast weights for feed forward networks at the time, but perhaps due to the lack of modern computational tools, the recurrent network version was mentioned mainly as a thought experiment~\citep{self_referential_weight_matrix}. A subsequent work demonstrated practical applications of fast weights~\citep{gomez2005evolving}, where a generator network is learnt through evolution to solve an artificial control problem. The concept of a network interacting with another network is central to the work of~\citep{synthetic_gradients,learning_to_learn}, and especially \citep{predicting_param_deep_learning,deep_fried_convnets,lu2016learnnet,de2016dynamic}, where certain parameters in a convolutional network are predicted by another network. These studies however did not explore the use of this approach to recurrent networks, which is a main contribution of our work.
+
+The focus of this work is to generate weights for practical architectures, such as convolutional networks and recurrent networks by taking layer embedding vectors as inputs. However, our hypernetworks can also be utilized to generate weights for a fully connected network by taking coordinate information as inputs similar to DPPNs. Using this setting, hypernetworks can approximately recover the convolutional architecture without explicitly being told to do so, a similar result obtained by ``Convolution by Evolution"~\citep{fernando2016convolution}. This result is described in Appendix~\ref{appendix:learnedconvfilters}.
+
+%Our work has similarities to some of the early pioneering works in neural networks. In ``Learning to Control Fast-Weight Memories"~\citep{learn_to_control_fast_weight_memories}, two \textit{feedforward} networks learn to deal with temporal sequences by having one network produce context dependent weight \textit{changes} for the second network. In ``A `Self-Referential' Weight Matrix", a thought experiment describes the theoretical possibility of a network that can `(in principle) learn new algorithms for modifying its weights in response to the environmental input"~\citep{self_referential_weight_matrix}. However, no experiments were performed to demonstrate the concept, as the author noted the high difficulty and computational complexity involved for training. Our work on \textit{Dynamic Hypernetworks} is independently developed from these works, and we also perform extensive experiments on our proposed framework to show that our method can achieve state-of-the-art results.%It is our hope J\"{u}rgen Schmidhuber will feel proud that his proposed thought experiment in 1993 is now a practical reality, after a quarter century of technological advancement.
+
+%More recent work related to our approach is ``Deep Fried Convnets"~\citep{deep_fried_convnets}, and ``Predicting Parameters in Deep Learning"~\citep{predicting_param_deep_learning} where most of the parameters in a convolutional network is predicted by a much smaller set of parameters.  In ``Dynamic Filter Networks"~\citep{dynamic_filter_networks}, the filters of a convolutional network is generated dynamically conditioned in the input.  Our explores both static and dynamic weight generation from a unified viewpoint of both feed-forward convolutional networks and recurrent networks, and we experiment with the more practical residual network and LSTM architectures.
+
+%Our work shares similar meta-learning ambitions to ``Decoupled Neural Interfaces using Synthetic Gradients"~\citep{synthetic_gradients} and ``Learning to learn by gradient descent by gradient descent"~\citep{learning_to_learn}, where a recurrent network system learns to dynamically predict its own weight gradients and also its weight updates.  We explore the approach of having a recurrent network system learn to dynamically generate its own weights directly.  Just as our brains have the ability to dynamically adjust the strength of its synaptic connections between its neurons over time, we would also like to enable our artificial neural networks to have the ability to dynamically adjust its weights over time as well.
+
+%In a way we are allowing the network to discover the best set of basis it should use to construct the weight matrices.
+
+%It is also more efficient and practical as it is trained end-to-end by gradient descent.
+
+%%%
+%%%
+
+% david notes
+%Jurgen Schmidhuber's work on Compressed Network Search, approximates a large weight matrix by Discrete Cosine Transform coefficients, so the parameter search is constrained only to the coefficient space of a few DCT coefficients.
+
+%Ken Stanley's HyperNEAT (also DPPN) goes the other extreme of evolving an entire network, to generate the weights of a large network (even with many layers), and the search space are the weights of the smaller NEAT network and its architecture.
+
+%We find that DCT may be too simple (and using the FFT prior may not be suitable for many problems), and NEAT may be overkill for many problems, and our approach is a middle ground.
+
+%Our approach is to fix architecture of the weight-generation network, and even use just a two-layer linear network approach, to generate the weights of a deep network.  Like DPPN, our system can be trained at the same time as the larger network in an end-to-end fashion.  Unlike DPPN, no evolution search procedure is required.  In a way we are allowing the network to discover the best set of basis it should use to construct the weight matrices.
+%
+
+%emph{Rough Notes}
+
+%Discuss intro here.
+%
+%First frame the problem of hard weight sharing as one particular design choice in many deep learning algorithms
+%and then frame the idea of weight generation by another network as a way to overcome such design choice
+%and then describe hypernet as a new framework to do it.
+
+%Schmidhuber's Compressed Weight Search \\
+%\url{http://people.idsia.ch/~juergen/compressednetworksearch.html} \\
+%HyperNEAT \\
+%\url{https://en.wikipedia.org/wiki/HyperNEAT} \\
+%DPPN \\
+%Deep ResNet \\
+%LSTM \\
+%Layer Normalization \\
+%\url{https://arxiv.org/abs/1607.06450}
+
+%\emph{Rough Notes}
+
+%Discuss the below in introduction:
+
+%Jurgen Schmidhuber does simple approach of generating a large weight matrix from Discrete Cosine Transform basis functions. \\
+%HyperNEAT is about evolving a a network to generate weights of another network. \\
+%DPPN uses this method, but end-to-end.
+
+%We will take the middle ground, and use a linear network to generate weights of a convnet. Use end-to-end training to discover optimal set of basis. 
+
+%Input to linear network is a small signal vector that is learned.
+
+%In addition, we will use the same linear network to generate the weights for all the layers of a convnet.  Each layer will be described by a unique small signal vector that is learned via end-to-end.
+
+\section{Methods}
+In this paper, we view convolutional networks and recurrent networks as two ends of a spectrum. On one end, recurrent networks can be seen as imposing weight-sharing across layers, which makes them inflexible and difficult to learn due to vanishing gradient. On the other end, convolutional networks enjoy the flexibility of not having weight-sharing, at the expense of having redundant parameters when the networks are deep. Hypernetworks can be seen as a form of relaxed weight-sharing, and therefore strikes a balance between the two ends.  See Appendix~\ref{appendix:conceptual_diagrams} for conceptual diagrams of Static and Dynamic Hypernetworks.
+
+%In the following sections, we will describe the application of Hypernetworks to generate the weights for convolutional networks and recurrent networks. When hypernetworks are applied to convolutional networks, they are called static hypernetworks. When hypernetworks are applied to recurrent networks, they are called dynamic hypernetworks. 
+
+\subsection{Static Hypernetwork: A Weight Factorization Approach for Deep Convolutional Networks}
+
+%Define algorithm to generate entire set of convnet filters from a small linear network.
+
+First we will describe how we construct a hypernetwork for the purpose of generating the weights of a feedforward convolutional network. In a typical deep convolutional network, the majority of model parameters are in the kernels of  convolutional layers.  Each kernel contain $N_{in} \times N_{out}$ filters and each filter has dimensions $f_{size} \times f_{size}$.  
+%We can visualize and model these kernels as a 2D image by laying out each filters in a rectangular grid as in Figure (x).  
+Let's suppose that these parameters are stored in a matrix $K^j \in \mathbb{R}^{N_{in}f_{size} \times N_{out}f_{size}}$ for each layer $j = 1,..,D$, where $D$ is the depth of the main convolutional network.  For each layer $j$, the hypernetwork receives a layer embedding $z^j \in \mathbb{R}^{N_{z}}$ as input and predicts $K^j$, which can be generally written as follows:
+%For a deep convolutional network consisting of many layers that have the same dimensions for most of its kernels, we can use the same hypernetwork to generate all of the kernels, and learn a unique $z$ for each kernel.
+\begin{equation}\label{generalhypernet}
+\begin{align}
+ \mat{K^j} &= g( \vect{z^j} ),~&\forall j = 1,..., D
+\end{align}
+\end{equation}
+
+%Where $\mat{K} \in \mathbb{R}^{ N_{in}f_{size} \times N_{out}f_{size}}, \vect{z} \in \mathbb{R}^{N_z}$.
+
+ 
+We note that this matrix $K^j$ can be broken down as $N_{in}$ slices of a smaller matrix with dimensions $f_{size} \times N_{out}f_{size}$, each slice of the kernel is denoted as $K_{i}^j \in \mathbb{R}^{f_{size}\times N_{out}f_{size}$.  Therefore, in our approach,  the hypernetwork is a two-layer linear network.  The first layer of the hypernetwork takes the input vector $z^j$ and linearly projects it into the $N_{in}$ inputs, with $N_{in}$ different matrices $W_{i} \in \mathbb{R}^{d\times N_z}$ and bias vectors ${B_{i}} \in \mathbb{R}^d$, where $d$ is the size of the hidden layer in the hypernetwork. For our purpose, we fix $d$ to be equal to $N_z$ although they can be different.  The final layer of the hypernetwork is a linear operation which takes an input vector $a_{i}$ of size $d$ and linearly projects that into $K_{i}$ using a common tensor $W_{out} \in \mathbb{R}^{f_{size}\times N_{out}f_{size} \times d}$ and bias matrix ${B_{out}} \in \mathbb{R}^{f_{size} \times N_{out}f_{size}}$.   The final kernel $K^j$ will be a concatenation of every $K_{i}^j$. Thus $g( \vect{z^j} )$ can be written as follows:
+
+\begin{equation}\label{statichypernet1}
+\begin{align}
+ \vect{a_{i}^j} &= \mat{W_{i}} \vect{z^j} + \vect{B_{i}},~&\forall i = 1,..,N_{in}, \forall j=1,...,D \\
+ \vect{K_{i}^j} &= \langle \mat{W_{out}}, \vect{a_{i}^j}\rangle~\text{\footnotemark[1]} + \vect{B_{out}},~&\forall i = 1,..,N_{in}, \forall j=1,...,D  \\
+ \vect{K^j} &= \begin{pmatrix}
+\vect{K_{1}^j} & \vect{K_{2}^j} & ... & \vect{K_{i}^j} &... & \vect{K_{N_{in}}^j}
+\end{pmatrix}
+,~&\forall j=1,...,D
+\end{align}
+\end{equation}
+\footnotetext[1]{Tensor dot product between $\mat{W} \in \mathbb{R}^{m \times n \times d}$ and  $\vect{a} \in \mathbb{R}^{d}$. Result $\langle \mat{W}, \vect{a}\rangle \in \mathbb{R}^{m \times n}$}
+
+%%Where TO DO:  fill in dimension descriptions of all vectors and matrices above.
+
+%The matrix $K^j$ can then be reshaped to a 4D Tensor of dimensions $N_{in} f_{size} \times N_{out} f_{size}$.  
+%In practice, we need to transpose this tensor into dimensions of $f_{size} \times f_{size} \times n_{in} \times n_{out}$ so that it can be used by a typical convolutional operation function.  
+
+In our formulation, the learnable parameters are $W_i$, $B_i$, $W_{out}$, $B_{out}$ together with all $z^{j}$'s.  During inference, the model simply takes the layer embeddings $z^j$ learned during training to reproduce the kernel weights for layer $j$ in the main convolutional network.  As a side effect, the number of learnable parameters in hypernetwork will be much lower than the main convolutional network. In fact, the total number of learnable parameters in hypernetwork is $N_{z}\times D + d\times (N_z + 1)\times N_i + f_{size}\times N_{out}\times f_{size}\times (d+1)$ compared to the $D \times N_{in} \times f_{size} \times N_{out}\times f_{size}$ parameters for the kernels of the main convolutional network.
+
+
+
+Our approach of constructing $g(.)$ is similar to the hierarchically semiseparable matrix approach proposed by \cite{matrixfactor}. Note that even though it seems redundant to have a two-layered linear hypernetwork as that is equivalent to a one-layered hypernetwork, the fact that $W_{out}$ and $B_{out}$ are shared makes our two-layered hypernetwork more compact than a one-layered hypernetwork. More concretely, a one-layered hypernetwork would have $N_z\times N_{in}\times f_{size}\times N_{out}\times f_{size}$ learnable parameters which is usually much bigger than a two-layered hypernetwork does.
+
+
+The above formulation assumes that the network architecture consists of kernels with same dimensions. In practice, deep convolutional network architectures consists of kernels of varying dimensions.  Typically, in many designs, the kernel dimensions are integer multiples of a basic size.  This is indeed the case in the residual network family of architectures~\citep{he2015deep} that we will be experimenting with later is an example of such a design.  In our experiments, although the kernels of a residual network do not share the same dimensions, the $N_i$ and $N_{out}$ dimensions for each kernel are integer multiples of 16.   To modify our approach to work with this architecture, we have our hypernetwork generate kernels for this basic size of 16, and if we require a larger kernel for a certain layer, we will concatenate multiple basic kernels together to form the larger kernel.
+
+\begin{eqnarray}
+\mat{K_{32\times64}}
+ &=&
+\left(\begin{array}{cccccc}
+\vect{K_{1}} & \vect{K_{2}} & \vect{K_{3}} & \vect{K_{4}} \\
+\vect{K_{5}} & \vect{K_{6}} & \vect{K_{7}} & \vect{K_{8}}
+\end{array}\right)
+\end{eqnarray}
+
+For example, if we need to generate a kernel with $N_i=32$ and $N_{out}=64$, we will tile eight basic kernels together.  Each basic kernel is generated by a unique $z$ embedding, hence the larger kernel will be expressed with eight embeddings.  Therefore, kernels that are larger in size will require a proportionally larger number of embedding vectors.  For visualizations of concatenated kernels, please see Appendix \ref{appendix:resnetfilter}. Figure~\ref{fig:mnistfilters} shows the similarity between kernels learned by a ConvNet to classify MNIST digits and those learned by a hypernetwork generating weights for a ConvNet. 
+
+\begin{figure}[h!]
+%\vskip-0.1in
+\begin{center}
+\centerline{\includegraphics[width=0.7\columnwidth]{figure/mnist_filters.png}}
+\caption{Kernels learned by a ConvNet to classify MNIST digits (left).  Kernels learned by a hypernetwork generating weights for the ConvNet (right).}
+\label{fig:mnistfilters}
+\end{center}
+%\vskip -0.3 in
+\end{figure} 
+%(similar to Figure~\ref{fig:mnistfilters})
+%Maybe write down the exact number of params for the three cases
+% Convolutional network
+% Hypernetwork with one linear layer
+% Hypernetwork with two linear layer
+
+%\subsection{HyperRNN by Dynamic HyperNetwork}
+
+\subsection{Dynamic Hypernetwork: Adaptive Weight Generation for Recurrent Networks}
+
+In the previous section, we outlined a procedure for using a hypernetwork to generate the weights for a deep convolutional network.  In this section, we will use a recurrent network to dynamically generate weights for another recurrent network, such that the weights can vary across many timesteps. In this context, hypernetworks are called dynamic hypernetworks, and can be seen as a form of \textit{relaxed} weight-sharing, a compromise between hard weight-sharing of traditional recurrent networks, and no weight-sharing of convolutional networks.  This relaxed weight-sharing approach allows us to control the trade off between the number of model parameters and model expressiveness.
+
+%For static hypernetwork models in previous section, a vector $z^j$ is learned during training and does not change during inference.  For dynamic hypernetworks, we will use a model that \textit{dynamically generates} $z^j$ during inference, thereby generating a customized set of weights tailored for each individual input sample.  
+
+%A recurrent neural network can be seen as a feed forward network with as many layers as the number of time steps it uses for processing information, with hard weight-sharing across all the layers.  A natural question to ask is what would happen if we remove the hard weight-sharing restriction from the RNN.
+
+%In this section, we will describe an extension to RNNs where the hard weight-sharing assumption is relaxed.  Through the application of a \texstit{dynamic} hypernetwork, we can generate a different set of weights for an RNN at each timestep, and also for each individual sample.  
+
+Our dynamic hypernetworks can be used to generate weights for RNN and LSTM.  When a hypernetwork is used to generate the weights for an RNN, it is called HyperRNN. At every time step $t$, a HyperRNN takes as input the concatenated vector of input $x_t$ and the hidden states of the main RNN $h_{t-1}$, it then generates as output the vector $\hat{h}_t$. This vector is then used to generate the weights for the main RNN at the same timestep.  Both the HyperRNN and the main RNN are trained jointly with backpropagation and gradient descent. In the following, we will give a more formal description of the model.
+
+%\subsubsection{HyperRNN}
+
+
+The standard formulation of a Basic RNN is given by:
+\begin{equation}
+\begin{align}
+  \vect{h}_t = \phi(\mat{W}_h \vect{h}_{t-1} + \mat{W}_x  \vect{x}_t + \vect{b})
+\end{align}
+\end{equation}
+where $\vect{h}_t$ is the hidden state, $\phi$ is a non-linear operation such as $tanh$ or $relu$, and the weight matrices and bias $\mat{W}_h \in \mathbb{R}^{N_h \times N_h}, \mat{W}_x \in \mathbb{R}^{N_h \times N_x}, \vect{b} \in \mathbb{R}^{N_h}$ is fixed each timestep for an input sequence $\mat{X} = ( \vect{x}_1, \vect{x}_2, \ldots, \vect{x}_T )$.
+
+\begin{figure}[!htb]
+%\vskip 0.2in
+\begin{center}
+\centerline{\includegraphics[width=0.8\columnwidth]{figure/hyperrnn.eps}}
+\caption{An overview of HyperRNNs. Black connections and parameters are associated basic RNNs. Orange connections and parameters are introduced in this work and associated with HyperRNNs. Dotted arrows are for parameter generation.}
+\label{figure:hyperrnn}
+\end{center}
+\vskip -0.2 in
+\end{figure} 
+
+In HyperRNN, we allow $\mat{W}_h$ and $\mat{W}_x$ to float over time by using a smaller hypernetwork to generate these parameters of the main RNN at each step (see Figure~\ref{figure:hyperrnn}).  More concretely, the parameters $W_h, W_x, b$ of the main RNN are different at different time steps, so that $h_t$ can now be computed as:
+\begin{equation}\label{basicdynamicrnn1}
+\begin{align}
+  \vect{h}_t &= \phi\big(\mat{W}_h(\vect{z_h}) \vect{h}_{t-1} + \mat{W}_x(\vect{z_x}) + b(z_b)\big), ~\text{where}\\ %\vect{x}_t + \vect{b(\vect{z_b})}) \\
+  %\mat{W}_h(\vect{z_h}) &= \mat{W}_{hz} \vect{z}_h \\
+  %\mat{W}_x(\vect{z_x}) &= \mat{W}_{xz} \vect{z}_h \\
+  %\mat{b}(\vect{z_b}) &= \mat{W}_{bz} \vect{z}_b + \vect{b}_{0} \\
+  %\vect{h}_t &= \sigma\big(\mat{W}_h(\vect{z_h}) \vect{h}_{t-1} + \mat{W}_x(\vect{z_x}\big) \vect{x}_t + \vect{b(\vect{z_b})}) \\
+  \mat{W}_h(\vect{z_h}) &= \langle\mat{W}_{hz}, \vect{z}_h\rangle \\
+  \mat{W}_x(\vect{z_x}) &= \langle\mat{W}_{xz}, \vect{z}_x\rangle \\
+  \mat{b}(\vect{z_b}) &= \mat{W}_{bz} \vect{z}_b + \vect{b}_{0} \\
+\end{align}
+\end{equation}
+%$\langle \mat{W}, \vect{a}\rangle \in \mathbb{R}^{m \times n}$
+%We will make the weight matrices and bias a function of embedding $z$ that will be allowed to vary over time.  Hence, the hypernetwork itself is a recurrent network. Similar to a static hypernetwork, the dynamic hypernetwork also uses a linear projection of $z$ into the desired weight matrix:
+Where $\mat{W}_{hz} \in \mathbb{R}^{N_h \times N_h \times N_z}, \mat{W}_{xz} \in \mathbb{R}^{N_h \times N_x \times N_z}, \mat{W}_{bz} \in \mathbb{R}^{N_h \times N_z}, \vect{b}_0 \in \mathbb{R}^{N_h}$ and $\vect{z}_h, \vect{z}_x, \vect{z}_z \in \mathbb{R}^{N_z}$. We use a recurrent hypernetwork to compute $z_h, z_x$ and $z_b$ as a function of $x_t$ and $h_{t-1}$:
+\begin{equation}\label{hyperrnncellsignal1}
+\begin{align}
+  \vect{\hat{x}}_t &= \begin{pmatrix} \vect{\vect{h}_{t-1}} \\ \vect{\vect{x}_t} \end{pmatrix} \\
+  \vect{\hat{h}}_t &= \phi(\mat{W}_{\hat{h}} \vect{\hat{h}}_{t-1} + \mat{W}_{\hat{x}} \vect{\hat{x}}_t + \vect{\hat{b}}) \\
+  \vect{z}_h &= \mat{W}_{\hat{h}h} \hat{h}_{t-1} + \vect{b}_{\hat{h}h} \\
+  \vect{z}_x &= \mat{W}_{\hat{h}x} \hat{h}_{t-1} + \vect{b}_{\hat{h}x} \\
+  \vect{z}_b &= \mat{W}_{\hat{h}b} \hat{h}_{t-1}
+\end{align}
+\end{equation}
+
+%Notice that the $z$ variables now also depend on input $x_t$ at each time step.
+Where $\mat{W}_{\hat{h}} \in \mathbb{R}^{N_{\hat{h}} \times N_{\hat{h}}}, \mat{W}_{\hat{x}} \in \mathbb{R}^{N_{\hat{h}} \times (N_h+N_z)}, \vect{b} \in \mathbb{R}^{N_{\hat{h}}},$ and $\mat{W}_{\hat{h}h}, \mat{W}_{\hat{h}x}, \mat{W}_{\hat{h}b} \in \mathbb{R}^{N_{z} \times N_{\hat{h}}}$ and $\vect{b}_{\hat{h}h}, \vect{b}_{\hat{h}x} \in \mathbb{R}^{N_{z}}$.  This \textit{HyperRNN Cell} has $N_{\hat{h}$ hidden units.  Typically $N_{\hat{h}$ is much smaller than $N_h$.
+
+As the embeddings $z_h$, $z_x$ and $z_b$ are of dimensions $N_{z}$, which is typically smaller than the hidden state size $N_{\hat{h}$ of the HyperRNN cell, a linear network is used to project the output of the HyperRNN cell into the embeddings in Equation \ref{hyperrnncellsignal1}.  After the embeddings are computed, they will be used to generate the full weight matrix of the main RNN. 
+
+
+%Where TO DO:  fill in dimension descriptions of all vectors and matrices above.  Also need to explain this set of equations very clearly.
+
+
+
+The above is a general formulation of a \textit{linear} dynamic hypernetwork applied to RNNs.  However, we found that in practice, Equation \ref{basicdynamicrnn1} is often not practical because the memory usage becomes too large for real problems.  The amount of memory required in the system described in Equation \ref{basicdynamicrnn1} will be $N_{z}$ times the memory of a Basic RNN, which limits the number of hidden units we can use in many practical applications.
+
+We can modify the dynamic hypernetwork system described in Equation \ref{basicdynamicrnn1} so that it can be much more scalable and memory efficient.  Our approach borrows from the static hypernetwork section and we will use an intermediate hidden vector $\vect{d}(z) \in \mathbb{R}^{N_h}$ to parametrize a weight matrix, where $\vect{d}(z)$ will be a linear projection of $z$.  To dynamically modify a weight matrix $\mat{W}$, we will allow each row of this weight matrix to be scaled linearly by an element in vector $d$.  We refer $d$ as a \textit{weight scaling vector}.  Below is the modification to $\mat{W(\vect{z})}$:
+
+\begin{equation}\label{weightscalingfactor}
+\begin{align}
+ \mat{W(\vect{z})} &=
+ \mat{W\big(\vect{d(\vect{z})\big)}} &=
+ \begin{pmatrix}
+    d_0(\vect{z})\vect{W_0} \\ d_1(\vect{z})\vect{W_1} \\ ... \\ d_{N_h}(\vect{z})\vect{W_{N_h}}
+ \end{pmatrix}
+\end{align}
+\end{equation}
+
+While we sacrifice the ability to construct an entire weight matrix from a linear combination of $N_z$ matrices of the same size, we are able to linearly scale the rows of a single matrix with $N_z$ degrees of freedom.  We find this to be a good trade off, as this formulation of converting $\mat{W}(z)$ into $\mat{W}(\vect{d}(z))$ decreases the amount of memory required by the dynamic hypernetwork.  Rather than requiring $N_{z}$ times the memory of a Basic RNN, we will only be using memory in the order $N_{z}$ times the number of hidden units, which is an acceptable amount of extra memory usage that is often available in many applications.  In addition, the row-level operation in Equation \ref{weightscalingfactor} can be shown to be equivalent to an element-wise multiplication operator and hence computationally much more efficient in practice.  Below is the more memory efficient version of the setup of Equation \ref{basicdynamicrnn1}:
+
+
+\begin{equation}\label{basicdynamicrnn2}
+\begin{align}
+  \vect{h}_t &= \phi\big(\vect{d_h}(\vect{z_h}) \odot \mat{W}_{h} \vect{h}_{t-1} + \vect{d_x}(\vect{z_x}) \odot  \mat{W}_{x}\vect{x}_t + b(z_b)\big), ~\text{where}\\ %\vect{x}_t + \vect{b(\vect{z_b})}) \\
+  \vect{d_h}(\vect{z_h}) &= \mat{W}_{hz} \vect{z}_h \\ %  + \vect{b}_{hz}
+  \vect{d_x}(\vect{z_x}) &= \mat{W}_{xz} \vect{z}_x \\ %  + \vect{b}_{xz}
+  \mat{b}(\vect{z_b}) &= \mat{W}_{bz} \vect{z}_b + \vect{b}_{0} \\
+\end{align}
+\end{equation}
+
+This formulation of the HyperRNN has some similarities to Recurrent Batch Normalization \citep{recurrentbatchnorm} and Layer Normalization \citep{layernorm}.  The central idea for the normalization techniques is to calculate the first two statistical moments of the inputs to the activation function, and to linearly scale the inputs to have zero mean and unit variance.  An additional set of fixed parameters are learned to \textit{unscale} the activations if required.  This element-wise operation also has similarities to the Multiplicative RNN \citep{sutskever2011generating} and Multiplicative Integration RNN \citep{wu2016multiplicative} where it was demonstrated that the multiplication-operation encouraged better gradient flow.
+
+Since the HyperRNN cell can indirectly modify the rows of each weight matrix and also the bias of the main RNN, it is implicitly also performing a linear scaling to the inputs of the activation function.  The difference here is that the linear scaling parameters can be different for each timestep and also for for each input sample.  It will be interesting to compare the scaling policy that the HyperRNN cell comes up with, to the hand engineered statistical-moments based scaling approaches.  In addition, we note that the existing normalization approaches can work together with the HyperRNN approach, where the HyperRNN cell will be tasked with discovering a better dynamical scaling policy to complement normalization.  We will also explore this combination in our experiments.
+
+The Long Short-Term Memory (LSTM) architecture \citep{lstm} is usually better than the Basic RNN at storing and retrieving information over longer time steps.  In our experiments, we will focus on this LSTM version of the HyperRNN, called the HyperLSTM.  The details of the HyperLSTM architecture is described in Appendix~\ref{appendix:hyperlstm}, along with specific implementation details in Appendix~\ref{appendix:inithyperlstm}.  We want to know whether the HyperLSTM cell can learn a weight adjustment policy that can rival statistical moments-based normalization methods, hence Layer Normalization will be one of our baseline methods.  We will therefore conduct experiments on two versions of HyperLSTM, one with and one without the application of Layer Normalization.
+
+\section{Experiments}
+In the following experiments, we will benchmark the performance of static hypernetworks on image recognition with MNIST and CIFAR-10, and the performance of dynamic hypernetworks on language modelling with Penn Treebank and Hutter Prize Wikipedia (\texttt{enwik8}) datasets and handwriting generation.
+\subsection{Using Static HyperNetworks to Generate Filters for Convolutional Networks and MNIST}
+
+We start by applying a hypernetwork to generate the filters for a convolutional network on MNIST.  Our main convolutional network is a small two layer network and the hypernetwork is used to generate the kernel for the second layer (7x7x16x16), which contains the bulk of the trainable parameters in the system.  Our weight matrix will be summarized by an embedding of size $N_z = 4$. See Appendix \ref{appendix:mnist} for further experimental setup details.
+%Table~\ref{tab:mnisttable} shows a comparison of accuracies and parameter counts for a normal convolutional network and a hypernetwork.
+
+For this task, the hypernetwork achieved a test accuracy of 99.24\%, comparable to the 99.28\% for the conventional method.  In this example, a kernel consisting of 12,544 weights is represented by an embedding vector of only 4 parameters, generated by a hypernetwork that has 4240 parameters. We can see the weight matrix this network produced by the hypernetwork in Figure~\ref{fig:mnistfilters}.  Now the question is whether we can also train a deep convolutional network, using a single hypernetwork generating a set of weights for each layer, on a dataset more challenging than MNIST.
+
+\subsection{Static Hypernetworks for Residual Network Architecture and CIFAR-10}
+
+The residual network architectures \citep{he2015deep, zagoruyko2016wide} are popular for image recognition tasks, as they can accommodate very deep networks while maintaining effective gradient flow across layers using skip connections.  The original resnet and subsequent derivatives \citep{zhang2016residual,huang2016densely} achieved state-of-the-art image recognition performance on a variety of public datasets.  While residual networks can be be very deep, and in some experiments as deep as 1001 layers (\citep{he2016identity}, it is important to understand whether some these layers share common properties and can be reduced effectively by introducing weight sharing.  If we enforce weight-sharing across many layers of a deep feed forward network, the network may share many properties to that of a recurrent network.  In this experiment, we want to explore this idea of enforcing \textit{relaxed} weight sharing across all of the layers of a deep residual network.  We will take a simple version of residual network, use a single hypernetwork to generate the weights of all of its layers for image classification task on the CIFAR-10 dataset.
+
+\newcommand{\blocka}[2]{
+  \(\left[
+      \begin{array}{c}
+        \text{3$\times$3, #1}\\
+        \text{3$\times$3, #1}
+      \end{array}
+    \right]\)$\times$#2
+}
+\newcommand{\blockb}[2]{
+  \(\left[
+      \begin{array}{c}
+        \text{3$\times$3, #1}\\
+        \text{1$\times$1, #1}\\
+        \text{3$\times$3, #1}
+      \end{array}
+    \right]\)$\times$#2
+}
+\newcommand{\convsize}[1]{#1$\times$#1}
+\newcommand{\convname}[1]{#1}
+\def\cellheight{0.34cm}
+\begin{table}[!htb]
+\small
+  \centering
+  \begin{tabular}{c|c|c}
+    \hline
+    group name & output size & block type \\
+    \hline
+    conv1 & $32\times32$ & [3$\times$3, 16] \\
+    \convname{conv2} & \convsize{32} & \blocka{16$\times$k}{N} \\[\cellheight]
+    \convname{conv3} & \convsize{16} & \blocka{32$\times$k}{N} \\[\cellheight]
+    \convname{conv4} & \convsize{8} & \blocka{64$\times$k}{N} \\
+    avg-pool & $1\times1$ & [$8\times8$] \\
+    \hline
+  \end{tabular}
+  \caption{Structure of Wide Residual Networks in \cite{zagoruyko2016wide}. $N$ determines the number of residual blocks in each group. Network width is determined by factor $k$.}
+
+  \label{table:wrnarch}
+  \vspace{-0.15 in}
+\end{table}
+
+Our experiment will use a version of the wide residual network \citep{zagoruyko2016wide}, described in Table \ref{table:wrnarch}, a popular and simple variant of the family of residual network architectures, and we will focus configurations ($N=6, K=1$) and  ($N=6, K=2$), referred to as WRN 40-1 and WRN 40-2 respectively.  In this setup, we will use a hypernetwork to generate all of the kernels in conv2, conv3, and conv4, so we will generate 36 layers of kernels in total.  The WRN architecture uses a filter size of 3 for every kernel.  We use the method outlined in the Methods section to deal with kernels of varying sizes, and use the an embedding size of $N_z = 64$ in our experiments.  See Appendix \ref{appendix:cifar10} for further experimental setup details.
+
+%, consisting of 12 x (3, 3, 32, 32) and 1 x (3, 3, 32, 64), 11 x (3, 3, 64, 64), 1 x (3, 3, 64, 128) and 11 x (3, 3, 128, 128) kernels.  One of the key aspects of residual networks is that the size of the kernels increase as we get into deeper layers, so we will also need to modify our algorithm slightly to accommodate for kernels of varying sizes.
+
+%The hypernetwork will be trained to generate weight matrices of size (3, 3, 16, 16), using an input signal vector of size 64.  Each of the actual weight matrices will be constructed by simply tiling the smaller generated matrices together.  For example, a (3, 3, 32, 32) kernel will be generated using 4 input vectors (256 numbers), and a (3, 3, 64, 128) kernel will be generated using 32 vectors (2048 numbers) and so on.  The 36 kernels will be generated by a single hypernetwork using 968 signal vectors each of size 64 as the input.
+
+% remember to put other details such as weight regularization in the appendix as well.
+
+\begin{table}[!htb]
+\small
+  \centering
+  \label{tab:table_cifar10}
+\begin{tabular}{@{}lc@{}c@{}c@{}}
+    \toprule
+\bf Model & \bf Test Error \space \space & \bf Param Count \\
+    \midrule
+  Network in Network \citep{networkinnetwork} & 8.81\% \\
+  FitNet \citep{fitnet} & 8.39\% \\
+  Deeply Supervised Nets \citep{lee2015deeply} & 8.22\% \\
+  Highway Networks \citep{srivastava2015highway} & 7.72\% \\
+  ELU \citep{clevert2015fast} & 6.55\% \\
+  Original Resnet-110 \citep{he2015deep} & 6.43\% & 1.7 M \\
+  Stochastic Depth Resnet-110 \citep{huang2016deep} & 5.23\% & 1.7 M \\
+  Wide Residual Network 40-1 \citep{zagoruyko2016wide} & 6.85\% & 0.6 M \\
+  Wide Residual Network 40-2 \citep{zagoruyko2016wide} & 5.33\% & 2.2 M \\
+  Wide Residual Network 28-10 \citep{zagoruyko2016wide} & 4.17\% & 36.5 M \\
+  ResNet of ResNet 58-4 \citep{zhang2016residual} & 3.77\% & 13.3 M \\
+  DenseNet \citep{huang2016densely} & 3.74\% & 27.2 M \\
+    \midrule
+  Wide Residual Network 40-1\footnotemark[2] & 6.73\% & 0.563 M \\
+  Hyper Residual Network 40-1 (ours) & 8.02\% & 0.097 M \\
+  Wide Residual Network 40-2\footnotemark[2] & 5.66\% & 2.236 M \\
+  Hyper Residual Network 40-2 (ours) & 7.23\% & 0.148 M \\
+
+    \bottomrule
+
+  \end{tabular}
+  \caption{CIFAR-10 Classification with hypernetwork generated weights.}
+  \vspace{-0.15 in}
+\end{table}
+
+%TO DO:  The Hyper Resnet results are still running, will need to update final results in a few days.
+
+We obtained similar classification accuracy numbers as reported in \citep{zagoruyko2016wide} with our own implementation.  We also note that the weights generated by the hypernetwork are used in a batch normalization setting without modification to the original model.  In principle, hypernetworks can also be applied to the newer variants of residual networks with more skip connections, such as DenseNets and ResNets of Resnets.
+
+From the results, we see that enforcing a relaxed weight sharing constraint to the deep residual network cost us $\sim$ 1.25-1.5\% in classification accuracy, while drastically reducing the number of parameters in the model as a trade off.  One reason for this reduction in accuracy is because different layers of a deep network is trained to extract different levels of features, and require different kinds of filters to perform optimally.  The hypernetwork enforces some commonality between every layer, but offers each layer 64 degrees of freedom to distinguish itself from the other layers.  While the network is no longer able to learn the optimal set of filters for each layer, it will learn the best set of filters given the constraints, and the resulting number of model parameters is drastically reduced.
+
+% perhaps the below paragraph should go in the methodology section.
+
+%Our observation here is that a single hypernetwork embedded within the main residual network, can be trained at the same time, to generate the entire set of kernels that the main network requires to perform a classification task.  Each kernel will be generated by common weights within the hypernetwork and as a result we end up using much fewer trainable parameters at the expense of classification accuracy.  This observation led us to explore the possibility of applying the reverse procedure to networks that were designed with hard weight-sharing constraints in the first place, such as recurrent networks.  If we can allow the weights of a recurrent network to change at each time step, and also be customized for each specific input sequence with the help of a hypernetwork, and go from hard weight-sharing to relaxed-weight sharing, we may be able to obtain better performance compared to normal recurrent networks, at the expense of an increase in training parameters.
+
+% decide whether to talk about 'compression' methods here, or not.
+
+\subsection{HyperLSTM for character-level Penn Treebank language modelling}
+
+The HyperLSTM model is evaluated on character level prediction task on the Penn Treebank corpus \citep{marcus1993building} using the train/validation/test split outlined in \citep{mikolov2012subword}.  As the dataset is quite small is prone to over fitting, we apply dropout on both input and output layers with a keep probability of 0.90.  Unlike previous approaches \citep{graves2013generating,ognawala2014regularizing} of applying weight noise during training, we instead also apply dropout to the recurrent layer \citep{henaff2016orthogonal} with the same dropout probability.
+
+% We found this type of dropout methodology to be easy to implement and works well with normal dropout procedure and also with layer normalization.  We do not apply dropout to the HyperLSTM Cell.  (maybe in earlier section)
+
+We compare our model to the basic LSTM cell, stacked LSTM cells  \citep{graves2013generating}, and LSTM with layer normalization applied.  In addition, we also experimented with applying layer normalization to HyperLSTM.  Using the setup in \citep{graves2013generating}, we use networks with 1000 units and train the network to predict the next character.  In this task, the HyperLSTM cell has 128 units and a signal size of 4.  As the HyperLSTM cell has more trainable parameters compared to the basic LSTM Cell, we also experimented with an LSTM Cell with 1250 units as well.  For more details regarding experimental setup, please refer to Appendix~\ref{appendix:ptb}
+
+\begin{table}[!htb]
+\small
+  \centering
+\begin{tabular}{@{}lc@{}c@{}c@{}}
+    \toprule
+\bf Model\footnotemark[1] & \bf Test\space \space \space \space & \bf Validation  \space \space & \bf Param Count \\
+    \midrule
+  ME n-gram \citep{mikolov2012subword} & 1.37 \\
+  Batch Norm LSTM \citep{recurrentbatchnorm} & 1.32 \\
+  Recurrent Dropout LSTM \citep{recurrentdropout} & 1.301 & 1.338 \\
+  Zoneout RNN \citep{zoneout} & 1.27 \\
+  HM-LSTM\footnotemark[3] \citep{hmlstm} & 1.27 \\
+     \midrule
+  LSTM, 1000 units \footnotemark[2] & 1.312 & 1.347 & 4.25 M \\
+  LSTM, 1250 units\footnotemark[2] & 1.306 & 1.340 & 6.57 M \\
+  2-Layer LSTM, 1000 units\footnotemark[2] & 1.281 & 1.312 & 12.26 M \\
+  Layer Norm LSTM, 1000 units\footnotemark[2] & 1.267 & 1.300 & 4.26 M \\
+  HyperLSTM (ours), 1000 units & 1.265 & 1.296 & 4.91 M \\
+  Layer Norm HyperLSTM, 1000 units (ours) & 1.250 & 1.281 & 4.92 M \\
+  Layer Norm HyperLSTM, 1000 units, Large Embedding (ours) & 1.233 & 1.263 & 5.06 M \\
+  2-Layer Norm HyperLSTM, 1000 units & 1.219 & 1.245 & 14.41 M \\
+    \bottomrule
+
+  \end{tabular}
+  \caption{Bits-per-character on the Penn Treebank test set.}
+  \label{tab:table_ptb}
+  \vspace{-0.15 in}
+\end{table}
+
+It is interesting to note that combining Recurrent Dropout with a basic LSTM cell achieves quite formidable performance.  Our implementation of Recurrent Dropout Basic LSTM cell reproduced similar results as \citep{recurrentdropout}, where they have also experimented with different dropout settings.  We also found that Layer Norm LSTM performed quite well when combined with recurrent dropout, making it both a formidable baseline and also an extension for HyperLSTM.
+
+In addition to outperforming both the larger or deeper version of the LSTM network, HyperLSTM also achieved similar performance of Layer Norm LSTM.  This suggests by dynamically adjusting the weight scaling vectors, the HyperLSTM cell has learned a policy of scaling inputs to the activation functions that is as efficient as the statistical moments-based strategy employed by Layer Norm, and that the required extra computation required is embedded inside the extra 128 units inside the HyperLSTM cell.  When we combine HyperLSTM with Layer Norm, we see an additional performance gain, implying that the HyperLSTM cell learned an adjustment policy that goes beyond moments-based regularization.  We also demonstrate that increasing the size of the embedding vector or stacking HyperLSTM layers together can also increase its performance.
+
+%The Character Penn Treebank dataset is of specific interest to us compared to larger datasets.  For larger datasets, one can generally build a larger model to get a gain in performance.  This is not the case for a small dataset.  We see that increasing both the size and the depth of the LSTM network does not achieve the gains provided by the HyperLSTM.  In many applications, we may be constrained by the size of training data we have, so we value the ability for a model to generalize well.
+
+\subsection{HyperLSTM for Hutter Prize Wikipedia language modelling}
+
+We train our model on the larger and more challenging Hutter Prize Wikipedia dataset, also known as \texttt{enwik8} \citep{Hutter2012} consisting of a sequence of 100M characters composed of 205 unique characters.  Unlike Penn Treebank, \texttt{enwik8} contains some foreign words (Latin, Arabic, Chinese), indented XML, metadata, and internet addresses, making it a more realistic and practical dataset to test character language models.  For more details regarding experimental setup, please refer to Appendix ~\ref{appendix:enwik8}.  Examples of these mixed variety of text samples that our HyperLSTM model can generate is in Appendix~\ref{appendix:generatedwiki}.
+
+\begin{table}[!htb]
+\small
+  \centering
+
+  \label{tab:table_enwik8}
+\begin{tabular}{@{}lc@{}c@{}}
+    \toprule
+\bf Model\footnotemark[1] & \bf \texttt{enwik8} \space \space & \bf Param Count \\
+    \midrule
+        	Stacked LSTM~\citep{graves2013generating}                    & 1.67 & 27.0 M \\
+        	MRNN~\citep{sutskever2011generating}                         & 1.60 \\
+        	GF-RNN~\citep{chung2015gated}                                & 1.58 & 20.0 M \\
+        	Grid-LSTM~\citep{kalchbrenner2015grid}                       & 1.47 & 16.8 M \\
+            LSTM~\citep{rocki2016surprisal} & 1.45 \\
+        	MI-LSTM~\citep{wu2016multiplicative}                         & 1.44 \\
+            Recurrent Highway Networks~\citep{zilly2016recurrent}        & 1.42 & 8.0 M \\
+        	Recurrent Memory Array Structures~\citep{rocki2016recurrent} & 1.40 \\
+			HM-LSTM\footnotemark[3] \citep{hmlstm}                       & 1.40 \\
+            Surprisal Feedback LSTM\footnotemark[4] \citep{rocki2016surprisal} & 1.37 \\
+     \midrule
+  LSTM, 1800 units, no recurrent dropout\footnotemark[2]  & 1.470 & 14.81 M \\
+  LSTM, 2000 units, no recurrent dropout\footnotemark[2]  & 1.461 & 18.06 M \\
+  Layer Norm LSTM, 1800 units\footnotemark[2]  & 1.402 & 14.82 M \\
+  HyperLSTM (ours), 1800 units & 1.391 & 18.71 M \\
+  Layer Norm HyperLSTM, 1800 units (ours) & 1.353 & 18.78 M \\
+  Layer Norm HyperLSTM, 2048 units (ours) & 1.340 & 26.54 M \\
+    \bottomrule
+
+  \end{tabular}
+  \caption{Bits-per-character on the \texttt{enwik8} test set. }
+  \vspace{-0.15 in}
+\end{table}
+\footnotetext[1]{We do not compare against methods that use dynamic evaluation.}
+\footnotetext[2]{Our implementation.}
+\footnotetext[3]{Based on results of version 2 at the time of writing. \url{http://arxiv.org/abs/1609.01704v2}}
+\footnotetext[4]{This method uses information about test errors during inference for predicting the next characters, hence it is not directly comparable to other methods that do not use this information.}
+
+We see that HyperLSTM is once again competitive to Layer Norm LSTM, and if we combine both techniques, the Layer Norm HyperLSTM achieves respectable results.  The version of HyperLSTM that uses 2048 hidden units achieve near state-of-the-art performance for this task.  In addition, HyperLSTM converges quicker per training step compared to LSTM and Layer Norm LSTM.  Please refer to Figure~\ref{fig:convergence} for the loss graphs.
+
+\begin{figure}[!htb]
+\begin{center}
+\centerline{\includegraphics[width=1.0\columnwidth]{figure/char_rnn_viz_diff.pdf}}
+\caption{Example text generated from HyperLSTM model.  We visualize how four of the main RNN's weight matrices (\textcolor{color1}{$\mat{W}_h^i$}, \textcolor{color2}{$\mat{W}_h^g$}, \textcolor{color3}{$\mat{W}_h^f$}, \textcolor{color4}{$\mat{W}_h^o$}) effectively change over time by plotting the norm of the changes below each generated character.  High intensity represent large changes being made to weights of main RNN.}
+\label{fig:activationcharacter}
+\end{center}
+\vskip -0.3 in
+\end{figure}
+
+When we use this prediction model as a generative model to sample a text passage, we use main RNN to model a probability distribution over possible characters conditioned over the preceding characters.  In the case of the HyperRNN, we allow the \textit{model parameters} of this generative model to vary over time, so in effect the HyperRNN cell is choosing the best model at any given time to generate a probability distribution to sample from.  We can demonstrate this by visualizing how the weight scaling vectors of the main RNN change during the character sampling process.  In Figure~\ref{fig:activationcharacter}, we examine a sample text passage generated by HyperLSTM after training on \texttt{enwik8} along with the weight differences below the text.  We see that in regions of low intensity, where the weights of the main RNN are relatively static, the types of phrases generated seem more deterministic.  For example, the weights do not change much during the words \texttt{Europeans}, \texttt{possessions} and \texttt{reservation}.  The regions of high intensity is when the HyperRNN cell is making relatively large changes to the weights of the main RNN.  These tend to happen in the areas between words, or sometimes during brackets.
+
+One might also wonder whether the HyperLSTM cell (without Layer Norm), via dynamically tuning the weight scaling vectors, has developed a policy that is similar to the statistics-based approach used by Layer Norm, given that both methods have similar performance.  One way to see this effect is to look at the histogram of the hidden states in the network.  In Figure~\ref{fig:activationhistogram}, we examine the histograms of $\phi(\vect{c_t})$, the hidden state of the LSTM before applying the output gate.
+
+\begin{figure}[!htb]
+\begin{center}
+\centerline{\includegraphics[width=1.0\columnwidth]{figure/activation_bins.pdf}}
+\caption{Normalized Histogram plots of $\phi(\vect{c_t})$ for different models during sampling.}
+\label{fig:activationhistogram}
+\end{center}
+\vskip -0.3 in
+\end{figure} 
+
+We see that the normalization process employed by Layer Norm reduces the saturation effects compared to the vanilla LSTM.  However, for the case of the HyperLSTM, we notice that most of the time the cell is saturated.  The HyperLSTM cell's dynamic weight adjustment policy appears to be doing something very different compared to statistical normalization, although the policy it came up with ended up providing similar performance as Layer Norm.  It is interesting to see that when we combine both methods, the HyperLSTM cell will need to determine an adjustment policy \textit{in spite of} the normalization forced upon it by Layer Norm.  An interesting question is whether there are problems where statistical normalization may actually be a setback to the policy developed by the HyperLSTM, and the best strategy is to ignore it.
+
+\begin{figure}[!htb]
+\vskip -0.0in
+\begin{center}
+\centerline{\includegraphics[width=0.9\columnwidth]{figure/loss_graphs.pdf}}
+\caption{Loss Graph for \texttt{enwik8} (left). Loss Graph for Handwriting Generation (right)}
+\label{fig:convergence}
+\end{center}
+\vskip -0.3 in
+\end{figure} 
+
+%\begin{comment}
+% have to wait for results
+
+\subsection{HyperLSTM for Handwriting Sequence Generation}
+
+In addition to modelling discrete sequential data, we want to see how the model performs when modelling sequences of real valued data.  We will train our model on the IAM online handwriting database \citep{iamdb} and have our model predict pen strokes as per Section 4.2 of \citep{graves2013generating}.  The dataset has contains 12179 handwritten lines from 221 writers, digitally recorded from a tablet.  We will model the (x, y) coordinate of the pen location at each recorded time step, along with a binary indicator of pen-up/pen-down.  The average sequence length is around 700 steps and the longest around 1900 steps, making the training task particularly challenging as the network needs to retain information about both the stroke history and also the handwriting style in order to predict plausible future handwriting strokes.  For experimental setup details, please refer to Appendix \ref{appendix:handwriting}.
+
+% debating whether to express concern about Graves' lack of a test set, in order to train on more data to generate better samples.  good tradeoff.
+
+\begin{table}[!htb]
+\small
+  \centering
+\begin{tabular}{@{}lc@{}c@{}}
+    \toprule
+\bf Model & \bf Log-Loss \space \space & \bf Param Count \\
+    \midrule
+        	LSTM, 900 units ~\citep{graves2013generating} & -1,026 \\
+        	3-Layer LSTM, 400 units ~\citep{graves2013generating} & -1,041 \\
+        	3-Layer LSTM, 400 units, adaptive weight noise ~\citep{graves2013generating} & -1,058 \\
+     \midrule
+  LSTM, 900 units, no dropout, no data augmentation.\footnotemark[1] & -1,026 & 3.36 M \\
+  3-Layer LSTM, 400 units, no dropout, no data augmentation.\footnotemark[1] & -1,039 & 3.26 M \\
+     \midrule
+  LSTM, 900 units\footnotemark[2] & -1,055 & 3.36 M \\
+  LSTM, 1000 units\footnotemark[2] & -1,048 & 4.14 M \\
+  3-Layer LSTM, 400 units\footnotemark[2] & -1,068 & 3.26 M \\
+  2-Layer LSTM, 650 units\footnotemark[2] & -1,135 & 5.16 M \\
+  Layer Norm LSTM, 900 units\footnotemark[2] & -1,096 & 3.37 M \\
+  Layer Norm LSTM, 1000 units\footnotemark[2] & -1,106 & 4.14 M \\
+  Layer Norm HyperLSTM, 900 units (ours) & -1,067 & 3.95 M \\
+  HyperLSTM (ours), 900 units & -1,162 & 3.94 M \\
+    \bottomrule
+  \end{tabular}
+  \caption{Log-Loss of IAM Online DB validation set. }\label{tab:handwritinglogloss}
+%\vskip -0.3 in
+\end{table}
+\footnotetext[1]{Our implementation, to replicate setup of~\citep{graves2013generating}.}
+\footnotetext[2]{Our implementation, with data augmentation, dropout and recurrent dropout.}
+
+In this task, we note that data augmentation and applying recurrent dropout improved the performance of all models, compared to the original setup by \citep{graves2013generating}.  In addition, for the LSTM model, increasing unit count per layer may not help the performance compared to increasing the layer depth.  We notice that a 3-layer 400 unit LSTM outperforms a 1-layer 900 unit one, and we found that a 2-layer 650 unit LSTM outperforming most configurations.  While layer norm helps with the performance, we found that in this task, layer norm does not combine well with HyperLSTM, and in this task the 900 unit HyperLSTM without layer norm achieved the best performance.
+
+Unlike the language modelling task, perhaps statistical normalization is far from the optimal approach for a weight adjustment policy.  The policy learned by the HyperLSTM cell not only performed well against the baseline, its convergence rate is also as fast as the 2-layer LSTM model.  Please refer to Figure~\ref{fig:convergence} for the loss graphs.
+
+In Appendix~\ref{appendix:generatedsamples}, we display three sets of handwriting samples generated from LSTM, Layer Norm LSTM, and HyperLSTM, corresponding to log-loss scores of -1055, -1096, and -1162 nats respectively in Table~\ref{tab:handwritinglogloss}.  Qualitative assessments of handwriting quality is always subjective, and depends an individual's taste in calligraphy.  From looking at the examples produced by the three models, our opinion is that the samples produced by LSTM is noisier than the other two models.  We also find HyperLSTM's samples to be a bit more coherent than the samples produced by Layer Norm LSTM.  We leave to the reader to judge which model produces handwriting samples of higher quality.
+
+\begin{figure}[!htb]
+\begin{center}
+\centerline{\includegraphics[width=1.0\columnwidth]{figure/handwriting_activations.pdf}}
+\caption{Handwriting sample generated from HyperLSTM model.  We visualize how four of the main RNN's weight matrices (\textcolor{color1}{$\mat{W}_h^i$} \textcolor{color2}{$\mat{W}_h^g$}, \textcolor{color3}{$\mat{W}_h^f$}, \textcolor{color4}{$\mat{W}_h^o$}) effectively change over time, by plotting norm of changes made to them over time.}
+\label{fig:activationhandwriting}
+\end{center}
+\vskip -0.15 in
+\end{figure}
+
+Similar to the earlier character generation experiment, we show a generated handwriting sample from the HyperLSTM model in Figure~\ref{fig:activationhandwriting}, along with a plot of how the weight scaling vectors of the main RNN is changing over time below the sample.  For a more detailed interactive demonstration of handwriting generation using HyperLSTM, visit \url{http://blog.otoro.net/2016/09/28/hyper-networks/}.
+
+We see that the regions of high intensity seem to be concentrated at many discrete instances, rather than slowly varying over time.  This implies that the weights experience regime changes rather than gradual slow adjustments.  We can see that many of these weight changes occur between the written words, and sometimes between written characters.  While the LSTM model alone already does a formidable job of generating time-varying parameters of a Mixture Gaussian distribution used to generate realistic handwriting samples, the ability to go one level deeper, and to dynamically generate the generative model is one of the key advantages of HyperRNN over a normal RNN.
+
+%\end{comment}
+
+\subsection{HyperLSTM for Neural Machine Translation}
+
+We experiment with the Neural Machine Translation task using the same experimental setup outlined in ~\citep{gnmt}. Our model is the same wordpiece model architecture with a vocabulary size of 32k, but we replace the LSTM cells with HyperLSTM cells. We benchmark the modified model on WMT'14 En$\rightarrow$Fr using the same test/validation set split described in the GNMT paper~\citep{gnmt}.  Please refer to Appendix \ref{appendix:nmt} for experimental setup details.
+
+\begin{table}[!htb]
+\small
+%\vskip -0.3 in
+  \centering
+\begin{tabular}{@{}lc@{}c@{}}
+    \toprule
+\bf Model & \bf Test BLEU \space \space & \bf Log Perplexity \\
+    \midrule
+       Deep-Att + PosUnk~\citep{DBLP:journals/corr/ZhouCWLX16} & 39.2  & \\
+       GNMT WPM-32K, LSTM ~\citep{gnmt} & 38.95  & 1.027  \\
+       GNMT WPM-32K, ensemble of 8 LSTMs ~\citep{gnmt} & 40.35 & \\
+     \midrule
+       GNMT WPM-32K, HyperLSTM (ours) & 40.03  & 0.993  \\
+    \bottomrule
+  \end{tabular}
+  \caption{Single model results on WMT En$\rightarrow$Fr (newstest2014) }\label{tab:nmtbleu}
+\end{table}
+
+The HyperLSTM cell improves the performance of the existing GNMT model, achieving state-of-the-art single model results for this dataset. In addition, we demonstrate the applicability of hypernetworks to large-scale models used in production systems. Please see Appendix \ref{appendix:generatednmt} for actual translation samples generated from both models for a qualitative comparison.
+
+\section{Conclusion}
+In this paper, we presented a method to use a hypernetwork to generate weights for another neural network. Our hypernetworks are trained end-to-end with backpropagation and therefore are efficient and scalable. We focused on two use cases of hypernetworks: static hypernetworks to generate weights for a convolutional network, dynamic hypernetworks to generate weights for recurrent networks. We found that the method works well while using fewer parameters. On image recognition, language modelling and handwriting generation, hypernetworks are competitive to or sometimes better than state-of-the-art models.
+
+
+\subsubsection*{Acknowledgments}
+We thank Jeff Dean, Geoffrey Hinton, Mike Schuster and the Google Brain team for their help with the project.
+
+%Use unnumbered third level headings for the acknowledgments. All
+%acknowledgments, including those to funding agencies, go at the end of the paper.
+
+\bibliography{iclr2017_conference}
+\bibliographystyle{iclr2017_conference}
+
+\newpage
+\appendix
+%\addcontentsline{toc}{section}{Appendice}
+\section{Appendix}
+\subsection{Hypernetworks to learn filters for a fully connected networks}
+\label{appendix:learnedconvfilters}
+
+\begin{figure}[!htb]
+%\vskip 0.2in
+\begin{center}
+%\centerline{\includegraphics[width=0.8\columnwidth]{figure/learning_filter.png}}
+\centerline{\includegraphics[width=1.0\columnwidth]{figure/mnist_filter_set_16x16.png}}
+\caption{Filters learned to classify MNIST digits in a fully connected network (left).  Filters learned by a hypernetwork (right).}
+\label{fig:learnedconvfilters}
+\end{center}
+\vskip -0.2 in
+\end{figure}
+
+We ran an experiment where the hypernetwork receives the $x, y$ locations of both the input pixel and the weight, and predicts the value of the hidden weight matrix in a fully connected network that learns to classify MNIST digits. In this experiment, the fully connected network (784-256-10) has one hidden layer of $16\times16$ units, where the hypernetwork is a pre-defined small feedforward network.  The weights of the hidden layer has $784\times256=200704$ parameters, while the hypernetwork is a $801$ parameter four layer feed forward relu network that would generate the $786\times256$ weight matrix. The result of this experiment is shown in Figure~\ref{fig:learnedconvfilters}. We want to emphasize that even though the network can learn convolutional-like filters during end-to-end training, its performance is rather poor: the best accuracy is 93.5\%, compared to 98.5\% for the conventional fully connected network.
+
+We find that the virtual coordinates-based approach to hypernetworks that is used by HyperNEAT and DPPN has its limitations in many practical tasks, such as image recognition and language modelling, and therefore developed our embedding vector approach in this work.
+
+\newpage
+\subsection{Conceptual Diagrams of Static and Dynamic Hypernetworks}\label{appendix:conceptual_diagrams}
+
+\begin{figure}[h!]
+\begin{center}
+\centerline{\includegraphics[width=0.6\columnwidth]{figure/appendix_feedforward_vs_recurrent.pdf}}
+\caption{Feedforward Network (top) and Recurrent Network (bottom)}
+\label{fig:appendix_feedforward_vs_recurrent}
+\end{center}
+\end{figure}
+
+\begin{figure}[h!]
+\begin{center}
+\centerline{\includegraphics[width=0.6\columnwidth]{figure/appendix_static_hypernetwork.pdf}}
+\caption{Static Hypernetwork generating weights for Feedforward Network}
+\label{fig:appendix_static_hypernetwork}
+\end{center}
+\end{figure}
+
+\begin{figure}[h!]
+\begin{center}
+\centerline{\includegraphics[width=0.6\columnwidth]{figure/appendix_dynamic_hypernetwork.pdf}}
+\caption{Dynamic Hypernetwork generating weights for Recurrent Network}
+\label{fig:appendix_dynamic_hypernetwork}
+\end{center}
+\end{figure}
+
+\newpage
+\subsubsection{Filter Visualizations for Residual Networks}\label{appendix:resnetfilter}
+
+In Figures~\ref{fig:resnetfilter1} and \ref{fig:resnetfilter2} are example visualizations for various kernels in a deep residual network.  Note that the 32x32x3x3 kernel generated by the hypernetwork was constructed by concatenating 4 basic kernels together.
+
+\begin{figure}[!htb]
+\vskip-0.0in
+\begin{center}
+\centerline{\includegraphics[width=0.95\columnwidth]{figure/actual_resnet.png}}
+\caption{Normal CIFAR-10 16x16x3x3 kernel (left).  Normal CIFAR-10 32x32x3x3 kernel (right).}
+\label{fig:resnetfilter1}
+\end{center}
+\vskip -0.3 in
+\end{figure} 
+
+\begin{figure}[!htb]
+\vskip0.0in
+\begin{center}
+\centerline{\includegraphics[width=0.95\columnwidth]{figure/hyper_resnet.png}}
+\caption{Generated 16x16x3x3 kernel (left).  Generated 32x32x3x3 kernel (right).}
+\label{fig:resnetfilter2}
+\end{center}
+\vskip -0.3 in
+\end{figure}
+
+\newpage
+\subsubsection{HyperLSTM}\label{appendix:hyperlstm}
+
+In this section we will discuss extension of HyperRNN to LSTM.  Our focus will be on the basic version of the LSTM architecture \cite{lstm}, given by:
+
+\begin{equation}\label{eq:lstm}
+\begin{align}
+%  \vect{h}_t &= \mat{W}_h(\vect{z_h}) \vect{h}_{t-1} + \mat{W}_x(\vect{z_x}) \vect{x}_t + \vect{b(\vect{z_b})} \\
+  \vect{i}_t &= \mat{W}_{h}^{i} \vect{h}_{t-1} + \mat{W}_{x}^{i} \vect{x}_t + \vect{b}^{i} \\
+  \vect{g}_t &= \mat{W}_{h}^{g} \vect{h}_{t-1} + \mat{W}_{x}^{g} \vect{x}_t + \vect{b}^{g} \\
+  \vect{f}_t &= \mat{W}_{h}^{f} \vect{h}_{t-1} + \mat{W}_{x}^{f} \vect{x}_t + \vect{b}^{f} \\
+  \vect{o}_t &= \mat{W}_{h}^{o} \vect{h}_{t-1} + \mat{W}_{x}^{o} \vect{x}_t + \vect{b}^{o} \\
+  \vect{c}_t &= \sigma(\vect{f}_t) \odot \vect{c}_{t-1} + \sigma(i_t) \odot \phi(\vect{g}_t) \\
+  \vect{h}_t &= \sigma(\vect{o}_t) \odot \phi(\vect{c}_t)
+\end{align}
+\end{equation}
+
+where $\vect{W}_{h}^{y} \in \mathbb{R}^{N_h \times N_h}, \vect{W}_{x}^{y} \in \mathbb{R}^{N_h \times N_x}, \vect{b}^{y} \in \mathbb{R}^{N_h}$, $\sigma$ is the $sigmoid$ operator, $\phi$ is the $tanh$ operator.  For brevity, $y$ is one of $\{i, g, f, o\}$.\footnotemark[1]
+\footnotetext[1]{In practice, all eight weight matrices are concatenated into one large matrix for computational efficiency.}
+
+Similar to the previous section, we will make the weights and biases a function of an embedding, and the embedding for each $\{i, g, f, o\}$ will be generated from a smaller  HyperLSTM cell.  As discussed earlier, we will also experiment with adding the option to use a Layer Normalization layer in the HyperLSTM.  The HyperLSTM Cell is given by:
+\begin{equation}\label{eq:hyperlstmcell}
+\begin{align}
+%  \vect{h}_t &= \mat{W}_h(\vect{z_h}) \vect{h}_{t-1} + \mat{W}_x(\vect{z_x}) \vect{x}_t + \vect{b(\vect{z_b})} \\
+  \vect{\hat{x}}_t &= \begin{pmatrix} \vect{\vect{h}_{t-1}} \\ \vect{\vect{x}_t} \end{pmatrix} \\
+  \vect{\hat{i}}_t &= \mathnormal{LN}( \mat{W}_{\hat{h}}^{\hat{i}} \vect{\hat{h}}_{t-1} + \mat{W}_{\hat{x}}^{\hat{i}} \vect{\hat{x}}_t + \vect{\hat{b}}^{\hat{i}} ) \\
+  \vect{\hat{g}}_t &= \mathnormal{LN}( \mat{W}_{\hat{h}}^{\hat{g}} \vect{\hat{h}}_{t-1} + \mat{W}_{\hat{x}}^{\hat{g}} \vect{\hat{x}}_t + \vect{\hat{b}}^{\hat{g}} ) \\
+  \vect{\hat{f}}_t &= \mathnormal{LN}( \mat{W}_{\hat{h}}^{\hat{f}} \vect{\hat{h}}_{t-1} + \mat{W}_{\hat{x}}^{\hat{f}} \vect{\hat{x}}_t + \vect{\hat{b}}^{\hat{f}} ) \\
+  \vect{\hat{o}}_t &= \mathnormal{LN}( \mat{W}_{\hat{h}}^{\hat{o}} \vect{\hat{h}}_{t-1} + \mat{W}_{\hat{x}}^{\hat{o}} \vect{\hat{x}}_t + \vect{\hat{b}}^{\hat{o}} ) \\
+  \vect{\hat{c}}_t &= \sigma(\vect{\hat{f}}_t) \odot \vect{\hat{c}}_{t-1} + \sigma(\hat{i}_t) \odot \phi(\vect{\hat{g}}_t) \\
+  \vect{\hat{h}}_t &= \sigma(\vect{\hat{o}}_t) \odot \phi(\vect{\mathnormal{LN}( \hat{c}}_t))
+\end{align}
+\end{equation}
+
+The weight matrices for each of the four $\{i, g, f, o\}$ gates will be a function of a set of embeddings $z_x$, $z_h$, and $z_b$ unique to each gates, just like the HyperRNN.  These embeddings are linear projections of the hidden states of the HyperLSTM Cell.  For brevity, $y$ is one of $\{i, g, f, o\}$ to avoid writing four sets of identical equations:
+\begin{equation}\label{eq:hyperlstmsignal}
+\begin{align}
+  \vect{z}_h^y &= \mat{W}_{\hat{h}h}^y \hat{h}_{t-1} + \vect{b}_{\hat{h}h}^y \\
+  \vect{z}_x^y &= \mat{W}_{\hat{h}x}^y \hat{h}_{t-1} + \vect{b}_{\hat{h}x}^y \\
+  \vect{z}_b^y &= \mat{W}_{\hat{h}b}^y \hat{h}_{t-1}
+\end{align}
+\end{equation}
+
+As in the memory efficient version of the HyperRNN, we will focus on the efficient version of the HyperLSTM, where we use weight scaling vectors $d$ to modify the rows of the weight matrices:
+\begin{equation}\label{eq:hyperlstmupdate}
+\begin{align}
+  \vect{y}_t &= \mathnormal{LN}\big( \vect{d_h^y} \odot \mat{W}_{h}^{y} \vect{h}_{t-1} + \vect{d_x^y} \odot \mat{W}_{x}^{y} \vect{x}_t + \vect{b}^{y}(\vect{z_b^y}) \big), ~\text{where}\\
+  \vect{d}_{h}^y(\vect{z_h}) &= \mat{W}_{hz}^y \vect{z}_h  \\ % + \vect{b}_{hz}^y
+  \vect{d}_{x}^y(\vect{z_x}) &= \mat{W}_{xz}^y \vect{z}_x  \\ % + \vect{b}_{xz}^y
+  \mat{b}^y(\vect{z_b^y}) &= \mat{W}_{bz}^y \vect{z}_b^y + \vect{b}_{0}^y \\
+\end{align}
+\end{equation}
+
+In our implementation, the cell and hidden state update equations for the main LSTM will incorporate a single dropout~\citep{dropout} gate, as developed in Recurrent Dropout without Memory Loss~\citep{recurrentdropout}, as we found this to help regularize the entire model during training:
+\begin{equation}\label{eq:hyperlstmhidden}
+\begin{align}
+%  \vect{h}_t &= \mat{W}_h(\vect{z_h}) \vect{h}_{t-1} + \mat{W}_x(\vect{z_x}) \vect{x}_t + \vect{b(\vect{z_b})} \\
+  \vect{c}_t &= \sigma(\vect{f}_t) \odot \vect{c}_{t-1} + \sigma(i_t) \odot \mathnormal{DropOut}( \phi(\vect{g}_t) ) \\
+  \vect{h}_t &= \sigma(\vect{o}_t) \odot \phi( \mathnormal{LN}(\vect{c}_t ) )
+\end{align}
+\end{equation}
+
+This dropout operation is generally only applied inside the main LSTM, not in the smaller HyperLSTM cell.  For larger size systems we can apply dropout to both networks.
+
+\subsubsection{Implementation Details and Weight Initialization for HyperLSTM}\label{appendix:inithyperlstm}
+
+%9-eq:hyperlstmcell
+%10-eq:hyperlstmsignal
+%11-eq:hyperlstmupdate
+%12-eq:hyperlstmhidden
+
+This section may be useful to readers who may want to implement their own version of the HyperLSTM Cell, as we will discuss initialization of the parameters for Equations~\ref{eq:hyperlstmcell} to \ref{eq:hyperlstmhidden}.  We recommend implementing the HyperLSTM within the same interface as a normal recurrent network cell so that using the HyperLSTM will not be any different than using a normal RNN.  These initialization parameters have been found to work well with our experiments, but they may be far from optimal depending on the task at hand.  A reference implementation developed using the TensorFlow~\citep{tensorflow} framework can be found at \url{http://blog.otoro.net/2016/09/28/hyper-networks/}}.
+
+The HyperLSTM Cell will be located inside the HyperLSTM, as described in Equation~\ref{eq:hyperlstmcell}.  It is a normal LSTM cell with Layer Normalization.  The inputs to the HyperLSTM Cell will be the concatenation of the input signal and the hidden units of the main LSTM cell.  The biases in Equation~\ref{eq:hyperlstmcell} are initialized to zero and Orthogonal Initialization \citep{henaff2016orthogonal} is performed for all weights.
+
+The embedding vectors are produced by the HyperLSTM Cell at each timestep by linear projection described in Equation~\ref{eq:hyperlstmsignal}.  The weights for the first two equations are initialized to be zero, and the biases are initialized to one.  The weights for the third equation are initialized to be a small normal random variable with standard deviation of 0.01.
+
+The weight scaling vectors that modify the weight matrices are generated from these embedding vectors, as per Equation~\ref{eq:hyperlstmupdate}.  Orthogonal initialization is applied to the $W_h$ and $W_x$, while $b_0$ is initialized to zero.  $W_{bz}$ is also initialized to zero.  For the weight scaling vectors, we used a method described in Recurrent Batch Normalization \citep{recurrentbatchnorm} where the scaling vectors are initialized to 0.1 rather than 1.0 and this has shown to help gradient flow.  Therefore, for weight matrices $W_{hz}$ and $W_{xz}$, we initialize to a constant value of $0.1/N_z$ to maintain this property.
+
+The only place we use dropout is in the single location in Equation~\ref{eq:hyperlstmhidden}, developed in Recurrent Dropout without Memory Loss \citep{recurrentdropout}.  We can use this dropout gate like any other normal dropout gate in a feed-forward network.
+
+\subsection{Experiment Setup Details and Hyper Parameters}
+
+\subsubsection{Using Static HyperNetworks to Generate Filters for Convolutional Networks and MNIST}\label{appendix:mnist}
+
+We train the network with a 55000 / 5000 / 10000 split for the training, validation and test sets and use the 5000 validation samples for early stopping, and train the network using Adam \citep{kingma2014adam} with a learning rate of 0.001 on mini-batches of size 1000.  To decrease over fitting, we pad MNIST training images to 30x30 pixels and random crop to 28x28.\footnotemark[1]
+
+\begin{table}[!htb]
+\small
+  \centering
+\begin{tabular}{@{}lc@{}c@{}c@{}}
+    \toprule
+\bf Model & \bf Test Error \space \space & \bf Params of 2\textsuperscript{nd} Kernel \\
+    \midrule
+  Normal Convnet & 0.72\% & 12,544 \\
+  Hyper Convnet & 0.76\% & 4,244 \\
+    \bottomrule
+  \end{tabular}
+  \caption{MNIST Classification with hypernetwork generated weights.}
+  \label{tab:mnisttable}
+\end{table}
+\footnotetext[1]{An IPython notebook demonstrating the MNIST Hypernetwork experiment is available at this website: \url{http://blog.otoro.net/2016/09/28/hyper-networks/}.}
+
+\subsubsection{Static Hypernetworks for Residual Network Architecture and CIFAR-10}\label{appendix:cifar10}
+
+We train both the normal residual network and the hypernetwork version using a 45000 / 5000 / 10000 split for training, validation, and test set.  The 5000 validation samples are randomly chosen and isolated from the original 50000 training samples.  We train the entire setup with a mini-batch size of 128 using Nesterov Momentum SGD for the normal version and Adam for the hypernetwork version, both with a learning rate schedule.  We apply L2 regularization on the kernel weights, and also on the hypernetwork-generated kernel weights of 0.0005\%.  To decrease over fitting, we apply light data augmentation pad training images to 36x36 pixels and random crop to 32x32, and perform random horizontal flips.
+
+\begin{table}[!htb]
+\small
+  \centering
+  \caption{Learning Rate Schedule for Nesterov Momentum SGD}
+  \label{tab:lrschedulemomentum}
+\begin{tabular}{@{}lc@{}}
+    \toprule
+\bf \textless step & \bf learning rate\\
+    \midrule
+  28,000 & 0.10000 \\
+  56,000 & 0.02000  \\
+  84,000 & 0.00400  \\
+  112,000 & 0.00080  \\
+  140,000 & 0.00016  \\
+
+    \bottomrule
+
+  \end{tabular}
+  
+\end{table}
+
+\begin{table}[!htb]
+\small
+  \centering
+  \caption{Learning Rate Schedule for Hyper Network / Adam}
+  \label{tab:lrscheduleadam}
+\begin{tabular}{@{}lc@{}}
+    \toprule
+\bf \textless step & \bf learning rate\\
+    \midrule
+  168,000 & 0.00200 \\
+  336,000 & 0.00100  \\
+  504,000 & 0.00020  \\
+  672,000 & 0.00005  \\
+    \bottomrule
+
+  \end{tabular}
+  
+\end{table}
+
+\subsubsection{Character-level Penn Treebank}\label{appendix:ptb}
+
+The hyper-parameters of all the experiments were selected through non-extensive grid search on the validation set.  Whenever possible, we used reported learning rates and batch sizes in the literature that had been used for similar experiments performed in the past.
+
+For Character-level Penn Treebank, we use mini-batches of size 128, to train on sequences of length 100.  We trained the model using Adam \citep{kingma2014adam} with a learning rate of 0.001 and gradient clipping of 1.0.  During evaluation, we generate the entire sequence, and do not use information about previous test errors for prediction, e.g., dynamic evaluation \citep{graves2013generating,rocki2016surprisal}.  As mentioned earlier, we apply dropout to the input and output layers, and also apply recurrent dropout with a keep probability of 90\%.  For baseline models, Orthogonal Initialization \citep{henaff2016orthogonal} is performed for all weights.
+
+We also experimented with a version of the model using a larger embedding size of 16, and also with a lower dropout keep probability of 85\%, and reported results with this ``Large Embedding" model in Table \ref{tab:table_ptb}.  Lastly, we stacked two layers of this ``Large Embedding" model together to measure the benefits of a multi-layer version of HyperLSTM, with a dropout keep probability of 80\%.
+
+\subsubsection{Hutter Prize Wikipedia}\label{appendix:enwik8}
+
+As {enwik8} is a bigger dataset compared to Penn Treebank, we will use 1800 units for our networks.  In addition, we perform training on sequences of length 250.  Our normal HyperLSTM Cell consists of 256 units, and we use an embedding size of 64.
+
+Our setup is similar in the previous experiment, using the same mini-batch size, learning rate, weight initialization, gradient clipping parameters and optimizer.  We do not use dropout for the input and output layers, but still apply recurrent dropout with a keep probability of 90\%.  For baseline models, Orthogonal Initialization \citep{henaff2016orthogonal} is performed for all weights.
+
+As in \citep{chung2015gated}, we train on the first 90M characters of the dataset, use the next 5M as a validation set for early stopping, and the last 5M characters as the test set.
+
+In this experiment, we also experimented with a slightly larger version of HyperLSTM with 2048 hidden units.  This version of of the model uses 2048 hidden units for the main network, inline with similar models for this experiment in other works.  In addition, its HyperLSTM Cell consists of 512 units with an embedding size of 64.  Given the larger number of nodes in both the main LSTM and HyperLSTM cell, recurrent dropout is also applied to the HyperLSTM Cell of this model, where we use a lower dropout keep probability of 85\%, and train on an increased sequence length of 300.
+
+\subsubsection{Handwriting Sequence Generation}\label{appendix:handwriting}
+We will use the same model architecture described in \citep{graves2013generating} and use a Mixture Density Network layer \citep{bishop} to generate a mixture of bi-variate Gaussian distributions to model at each time step to model the pen location.  We normalize the data and use the same train/validation split as per \citep{graves2013generating} in this experiment.  We remove samples less than length 300 as we found these samples contain a lot of recording errors and noise.  After the pre-processing, as the dataset is small, we introduce data augmentation of chosen uniformly from +/- 10\% and apply a this random scaling a the samples used for training.
+
+One concern we want to address is the lack of a test set in the data split methodology devised in \citep{graves2013generating}.  In this task, qualitative assessment of generated handwriting samples is arguably just as important as the quantitative log likelihood score of the results.  Due to the small size of the dataset, we want to use as large as possible the portion of the dataset to train our models in order to generate better quality handwriting samples so we can also judge our models qualitatively in addition to just examining the log-loss numbers, so for this task we will use the same training / validation split as \citep{graves2013generating}, with a caveat that we may be somewhat over fitting to the validation set in the quantitative results.  In future works, we will explore using larger datasets to conduct a more rigorous quantitative analysis.
+
+For model training, will apply recurrent dropout and also dropout to the output layer with a keep probability of 0.95.  The model is trained on mini-batches of size 32 containing sequences of variable length.  We trained the model using Adam \citep{kingma2014adam} with a learning rate of 0.0001 and gradient clipping of 5.0.  Our HyperLSTM Cell consists of 128 units and a signal size of 4.  For baseline models, Orthogonal Initialization \citep{henaff2016orthogonal} is performed for all weights.
+
+\subsubsection{Neural Machine Translation}\label{appendix:nmt}
+
+Our experimental procedure follows the procedure outlined in Sections 8.1 to 8.4 of the GNMT paper \citep{gnmt}.  We only performed experiments with a single model and did not conduct experiments with Reinforcement Learning or Model Ensembles as described in Sections 8.5 and 8.6 of the GNMT paper.
+
+The GNMT paper outlines several methods for the training procedure, and investigated several approaches including combining Adam and SGD optimization methods, in addition to weight quantization schemes. In our experiment, we used only the Adam \citep{kingma2014adam} optimizer with the same hyperparameters described in the GNMT paper. We did not employ any quantization schemes.
+
+We replaced LSTM cells in the GNMT WPM-32K architecture, with LayerNorm HyperLSTM cells with the same number of hidden units.  In this experiment, our HyperLSTM Cell consists of 128 units with an embedding size of 32.
+
+%As we have constructed the HyperLSTM model in a modular style outlined earlier in \ref{appendix:inithyperlstm}, we were able to conduct this experiment by simply switching the choice of RNN cells in the GNMT system.  This is possible due to the modularity of the TensorFlow~\citep{tensorflow} framework.
+
+\newpage
+\subsection{Examples of Generated Wikipedia Text}\label{appendix:generatedwiki}
+
+\begin{figure}[h!] % <--- only p
+\begin{lstlisting}
+The eastern half of Russia varies from Modern to Central Europe. Due to similar lighting and the extent of the combination of long tributaries to the [[Gulf of Boston]], it is more of a private warehouse than the [[Austro-Hungarian Orthodox Christian and Soviet Union]].
+
+==Demographic data base==
+
+[[Image:Auschwitz controversial map.png|frame|The ''Austrian Spelling'']]
+[[Image:Czech Middle East SSR chief state 103.JPG|thumb|Serbian Russia movement]] [[1593]]&amp;ndash;[[1719]], and set up a law of [[parliamentary sovereignty]] and unity in Eastern churches. 
+
+In medieval Roman Catholicism Tuba and Spanish controlled it until the reign of Burgundian kings and resulted in many changes in multiculturalism, though the [[Crusades]], usually started following the [[Treaty of Portugal]], shored the title of three major powers, only a strong part.
+
+[[French Marines]] (prompting a huge change in [[President of the Council of the Empire]], only after about [[1793]], the Protestant church, fled to the perspective of his heroic declaration of government and, in the next fifty years, [[Christianity|Christian]] and [[Jutland]]. Books combined into a well-published work by a single R. (Sch. M. ellipse poem) tradition in St Peter also included 7:1, he dwell upon the apostle, scripture and the latter of Luke; totally unknown, a distinct class of religious congregations that describes in number of [[remor]]an traditions such as the [[Germanic tribes]] (Fridericus or Lichteusen and the Wales). Be introduced back to the [[14th century]], as related in the [[New Testament]] and in its elegant [[Anglo-Saxon Chronicle]], although they branch off the characteristic traditions which Saint [[Philip of Macedon]] asserted.
+
+Ae also in his native countries.
+
+In [[1692]], Seymour was barged at poverty of young English children, which cost almost the preparation of the marriage to him.
+
+Burke's work was a good step for his writing, which was stopped by clergy in the Pacific, where he had both refused and received a position of successor to the throne. Like the other councillors in his will, the elder Reinhold was not in the Duke, and he was virtually non-father of Edward I, in order to recognize [[Henry II of England|Queen Enrie]] of Parliament.
+
+The Melchizedek Minister Qut]] signed the [[Soviet Union]], and forced Hoover to provide [[Hoover (disambiguation)|hoover]]s in [[1844]], [[1841]]. 
+
+His work on social linguistic relations is divided to the several times of polity for educatinnisley is 760 Li Italians.  After Zaiti's death, and he was captured August 3, he witnessed a choice better by public, character, repetitious, punt, and future.
+\end{lstlisting}
+\caption{\texttt{enwik8} sample generated from 2048-unit Layer Norm HyperLSTM}
+\label{nextpage}
+\end{figure}
+
+\afterpage{\clearpage}
+\begin{figure}[h!] % <--- only p
+\begin{lstlisting}
+== Quatitis==
+:''Main article: [[sexagesimal]]''
+
+Sexual intimacy was traditionally performed by a male race of the [[mitochondria]] of living things. The next geneme is used by ''Clitoron'' into short forms of [[sexual reproduction]]. When a maternal suffeach-Lashe]] to the myriad of a &quot;master's character&quot;. He recognizes the associated reflection of [[force call|carriers]], the [[Battle of Pois except fragile house and by historians who have at first incorporated his father.
+
+==Geography==
+The island and county top of Guernsey consistently has about a third of its land, centred on the coast subtained by mountain peels with mountains, squares, and lakes that cease to be links with the size and depth of sea level and weave in so close to lowlands. Strategically to the border of the country also at the southeast corner of the province of Denmark do not apply, but sometimes west of dense climates of coastal Austria and west Canada, the Flemish area of the continent actually inhabits [[tropical geographical transition]] and transitions from [[soil]] to [[snow]] residents.]]
+
+==Definition==
+The symbols are ''quotational'' and '''distinct''' or advanced. {{ref|no_1}} Older readings are used for [[phrase]]s, especially, [[ancient Greek]], and [[Latin]] in their development process. Several varieties of permanent systems typically refer to [[primordial pleasure]] (for example, [[Pleistocene]], [[Classical antenni|Ctrum]]), but its claim is that it holds the size of the coci, but is historically important both for import: brewing and commercial use.
+
+A majority of cuisine specifically refers to this period, where the southern countries developed in the 19th century. Scotland had a cultural identity of or now a key church who worked between the 8th and 60th through 6 (so that there are small single authors of detailed recommendations for them and at first) rather than appearing, [[Adoptionism|adoptionists]] often started inscribed with the words distinct from two types.  On the group definition the adjective ''fighting'' is until Crown Violence Association]], in which the higher education [[motto]] (despite the resulting attack on [[medical treatment]]) peaked on [[15 December]], [[2005]]. At 30 percent, up to 50% of the electric music from the period was created by Voltaire, but Newton promoted the history of his life.
+
+Publications in the Greek movie ''[[The Great Theory of Bertrand Russell]]'', also kept an important part into the inclusion of ''[[The Beast for the Passage of Study]]'', began in [[1869]], opposite the existence of racial matters.  Many of Mary's religious faiths (including the [[Mary Sue Literature]] in the United States) incorporated much of Christianity within Hispanic [[Sacred text]]s.
+
+But controversial belief must be traced back to the 1950s stated that their anticolonial forces required the challenge of even lingering wars tossing nomon before leaves the bomb in paint on the South Island, known as [[Quay]], facing [[Britain]], though he still holds to his ancestors a strong ancestor of Orthodoxy. Others explain that the process of reverence occurred from [[Common Hermitage]], when the [[Crusade|Speakers]] laid his lifespan in [[Islam]] into the north of Israel. At the end of the [[14th century BCE]], the citadel of [[Israel]] set Eisenace itself in the [[Abyssinia]]n islands, which was Faroe's Dominican Republic claimed by the King.
+\end{lstlisting}
+\caption{\texttt{enwik8} sample generated from 2048-unit Layer Norm HyperLSTM}
+\label{nextpage}
+\end{figure}
+
+\newpage
+\subsection{Examples of Randomly Chosen Generated Handwriting Samples}\label{appendix:generatedsamples}
+\begin{figure}[h!] % <--- only p
+\centering
+\includegraphics[width=1.0\columnwidth]{figure/lstm_handwriting.pdf}
+\caption{Handwriting samples generated from LSTM}
+\label{nextpage}
+\end{figure}
+
+\afterpage{\clearpage}
+\begin{figure}[p] % <--- only p
+\centering
+\includegraphics[width=1.0\columnwidth]{figure/layer_norm_handwriting.pdf}
+\caption{Handwriting samples generated from Layer Norm LSTM}
+\label{nextpage}
+\end{figure}
+
+\afterpage{\clearpage}
+\begin{figure}[p] % <--- only p
+\centering
+\includegraphics[width=1.0\columnwidth]{figure/hyper_handwriting.pdf}
+\caption{Handwriting samples generated from HyperLSTM}
+\label{nextpage}
+\end{figure}
+
+\newpage
+\subsection{Examples of Randomly Chosen Machine Translation Samples}\label{appendix:generatednmt}
+
+We randomly selected translation samples generated from both LSTM baseline and HyperLSTM models from the WMT'14 En$\rightarrow$Fr Test Set.  Given an English phrase, we can compare between the correct French translation, the LSTM translation, and the HyperLSTM translation.
+
+\begin{tcolorbox}
+\small
+English Input
+\begin{verbatim}
+I was expecting to see gnashing of teeth and a fight breaking
+out at the gate . 
+\end{verbatim}
+French (Ground Truth)
+\begin{verbatim}
+Je m' attendais à voir des grincements de dents et une
+bagarre éclater à la porte .
+\end{verbatim}
+LSTM Translation
+\begin{verbatim}
+Je m' attendais à voir des larmes de dents et un combat à la
+porte .
+\end{verbatim}
+HyperLSTM Translation
+\begin{verbatim}
+Je m' attendais à voir des dents grincer des dents et une
+bataille éclater à la porte .
+\end{verbatim}
+\end{tcolorbox}
+
+\begin{tcolorbox}
+\small
+English Input
+\begin{verbatim}
+Prosecuting , Anne Whyte said : " If anyone should know not
+to the break the law , it is a criminal solicitor . "
+\end{verbatim}
+French (Ground Truth)
+\begin{verbatim}
+Le procureur Anne Whyte a déclaré : « Si quelqu' un doit
+savoir qu' il ne faut pas violer la loi , c' est bien un
+avocat pénaliste . »
+\end{verbatim}
+LSTM Translation
+\begin{verbatim}
+Prosecuting , Anne Whyte a dit : « Si quelqu' un doit savoir
+qu' il ne faut pas enfreindre la loi , c' est un solicitor
+criminel .
+\end{verbatim}
+HyperLSTM Translation
+\begin{verbatim}
+En poursuivant , Anne Whyte a dit : « Si quelqu' un doit
+savoir ne pas enfreindre la loi , c' est un avocat criminel .
+\end{verbatim}
+\end{tcolorbox}
+
+\begin{tcolorbox}
+\small
+English Input
+\begin{verbatim}
+According to her , the CSRS was invited to a mediation and she
+asked for an additional period for consideration . 
+\end{verbatim}
+French (Ground Truth)
+\begin{verbatim}
+Selon elle , la CSRS a été invitée à une médiation et elle a
+demandé un délai supplémentaire pour y réfléchir .
+\end{verbatim}
+LSTM Translation
+\begin{verbatim}
+Selon elle , le SCRS a été invité à une médiation et elle a demandé
+un délai supplémentaire .
+\end{verbatim}
+HyperLSTM Translation
+\begin{verbatim}
+Selon elle , le SCRS a été invité à une médiation et elle a demandé
+une période de réflexion supplémentaire .
+\end{verbatim}
+\end{tcolorbox}
+
+\newpage
+
+\begin{tcolorbox}
+\small
+English Input
+\begin{verbatim}
+Relations between the US and Germany have come under strain
+following claims that the NSA bugged Chancellor Angela 's
+Merkel 's phone . 
+\end{verbatim}
+French (Ground Truth)
+\begin{verbatim}
+Les relations entre les États-Unis et l' Allemagne ont été
+mises à rude épreuve à la suite de plaintes selon lesquelles
+la NSA avait mis sur écoute le téléphone portable de la
+chancelière allemande Angela Merkel .
+\end{verbatim}
+LSTM Translation
+\begin{verbatim}
+Les relations entre les Etats-Unis et l' Allemagne ont été
+mises à rude épreuve suite aux affirmations selon lesquelles
+la NSA aurait pris le téléphone de Merkel de la chancelière
+Angela .
+\end{verbatim}
+HyperLSTM Translation
+\begin{verbatim}
+Les relations entre les États-Unis et l' Allemagne ont été
+mises à rude épreuve après que la NSA a attaqué le téléphone
+de la chancelière Angela Angela .
+\end{verbatim}
+\end{tcolorbox}
+
+\begin{tcolorbox}
+\small
+English Input
+\begin{verbatim}
+Germany 's BfV advises executives to consider using simple prepaid
+mobiles when on foreign trips because of the risk that smart phones
+are compromised . 
+\end{verbatim}
+French (Ground Truth)
+\begin{verbatim}
+Le BfV d' Allemagne conseille à ses dirigeants d' envisager
+d' utiliser de simples téléphones portables prépayés lors de leurs
+voyages à l' étranger en raison du risque d' atteinte à
+l' intégrité des smartphones .
+\end{verbatim}
+LSTM Translation
+\begin{verbatim}
+Le BfV allemand conseille aux dirigeants d' envisager
+l' utilisation de mobiles prépayés simples lors de voyages à
+l' étranger en raison du risque de compromission des téléphones
+intelligents .
+\end{verbatim}
+HyperLSTM Translation
+\begin{verbatim}
+Le BfV allemand conseille aux dirigeants d' envisager
+l' utilisation de téléphones mobiles prépayés simples lors de
+voyages à l' étranger en raison du risque que les téléphones
+intelligents soient compromis .
+\end{verbatim}
+\end{tcolorbox}
+
+\begin{tcolorbox}
+\small
+English Input
+\begin{verbatim}
+I was on the mid-evening news that same evening , and on TV the
+following day as well . 
+\end{verbatim}
+French (Ground Truth)
+\begin{verbatim}
+Le soir-même , je suis au 20h , le lendemain aussi je suis à la
+télé .
+\end{verbatim}
+LSTM Translation
+\begin{verbatim}
+J' étais au milieu de l' actualité le soir même , et à la
+télévision le lendemain également .
+\end{verbatim}
+HyperLSTM Translation
+\begin{verbatim}
+J' étais au milieu de la soirée ce soir-là et à la télévision le
+lendemain .
+\end{verbatim}
+\end{tcolorbox}
+
+\end{document}
+
+
+\end{comment}

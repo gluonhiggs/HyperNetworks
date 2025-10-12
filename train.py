@@ -89,7 +89,7 @@ while total_iter < max_iter:
         optimizer.step()
         lr_scheduler.step()
 
-        running_loss += loss.data[0]
+        running_loss += loss.item()
         if i % print_freq == (print_freq-1):
             print("[Epoch %d, Total Iterations %6d] Loss: %.4f" % (epochs + 1, total_iter + 1, running_loss/print_freq))
             running_loss = 0.0
@@ -105,7 +105,7 @@ while total_iter < max_iter:
         toutputs = net(Variable(timages.cuda()))
         _, predicted = torch.max(toutputs.cpu().data, 1)
         total += tlabels.size(0)
-        correct += (predicted == tlabels).sum()
+        correct += (predicted == tlabels).sum().item()
 
     accuracy = (100. * correct) / total
     print('After epoch %d, accuracy: %.4f %%' % (epochs, accuracy))
