@@ -17,7 +17,7 @@ To cite, please use the following BibTeX entry:
 ## How to Run
 
 ```commandline
-python train.py
+python train_hyper.py
 ```
 
 ## Working
