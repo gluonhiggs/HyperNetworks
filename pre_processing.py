@@ -209,7 +209,7 @@ def preprocess_tasks(split, task_nums_or_task_names):
     """
     Preprocess tasks by loading problems and solutions.
     """
-    data_dir = os.environ.get('ARC_DATA_DIR', 'dataset_old/')
+    data_dir = os.environ.get('ARC_DATA_DIR', 'dataset/')
     print("=" * 60)
     print(f"Preprocessing tasks in {data_dir} for split '{split}'")
     print("=" * 60)
