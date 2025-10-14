@@ -207,7 +207,7 @@ Output: Complete weights_list for ARCCompressor
 
 Task metadata is normalized to [0, 1] range:
 - `n_examples` / 12.0 (max 12 in dataset)
-- `n_colors` / 20.0 (safe maximum)
+- `n_colors` / 9.0 (safe maximum)
 - `n_x` / 30.0 (max grid height)
 - `n_y` / 30.0 (max grid width)
 

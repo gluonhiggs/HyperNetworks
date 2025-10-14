@@ -65,7 +65,7 @@ class HyperNet(nn.Module):
         # Normalize metadata (based on global maxes from stats)
         metadata = torch.tensor([
             task.n_examples / 12.0,
-            task.n_colors / 20.0,  # Safer max
+            task.n_colors / 9.0,  # Safer max
             task.n_x / 30.0,
             task.n_y / 30.0
         ], dtype=torch.float32, device=device)

@@ -156,7 +156,7 @@ class ARCPrimaryNetwork(nn.Module):
 
         metadata = torch.tensor([
             task.n_examples / 12.0,
-            task.n_colors / 20.0,
+            task.n_colors / 9.0,
             task.n_x / 30.0,
             task.n_y / 30.0
         ], dtype=torch.float32, device=device)
