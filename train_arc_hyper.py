@@ -7,7 +7,7 @@ import numpy as np
 
 import pre_processing
 import train
-from arc_primary_net import ARCPrimaryNetwork
+from primary_net_arc import ARCPrimaryNetwork
 import solution_selection
 
 

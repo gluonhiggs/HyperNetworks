@@ -3,7 +3,7 @@ import torch
 import layers
 from pre_processing import Task
 from hypernetwork_arc import HyperNetworkARC
-from arc_primary_net import PuzzleEmbedding
+from primary_net_arc import PuzzleEmbedding
 
 torch.set_default_dtype(torch.float32)
 

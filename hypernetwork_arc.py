@@ -4,6 +4,23 @@ import torch.nn as nn
 import multitensor_systems
 
 
+class WeightsStructure:
+    """Container for all generated weights matching ARCCompressor structure."""
+    def __init__(self):
+        self.multiposteriors = None
+        self.decode_weights = None
+        self.target_capacities = None
+        self.share_up_weights = []
+        self.share_down_weights = []
+        self.softmax_weights = []
+        self.cummax_weights = []
+        self.shift_weights = []
+        self.direction_share_weights = []
+        self.nonlinear_weights = []
+        self.head_weights = None
+        self.mask_weights = None
+
+
 class HyperNetworkARC(nn.Module):
     """
     A hypernetwork that generates weights for ARCCompressor dynamically based on task metadata.
@@ -53,15 +70,14 @@ class HyperNetworkARC(nn.Module):
 
     def forward(self, task, puzzle_emb):
         """
-        Generate complete weights_list for the given task.
+        Generate all weights for the given task.
 
         Args:
             task: Task object with metadata (n_examples, n_colors, n_x, n_y)
             puzzle_emb: Learnable puzzle embedding tensor [emb_dim]
 
         Returns:
-            weights_list: Flat list of all weight tensors
-            Corresponding MultiTensor structures matching Initializer output
+            WeightsStructure: Object containing all weight components for ARCCompressor
         """
         device = puzzle_emb.device
         multitensor_system = task.multitensor_system
@@ -78,32 +94,22 @@ class HyperNetworkARC(nn.Module):
         h = torch.cat([puzzle_emb, metadata])
         h = self.body(h)  # [hidden_dim]
 
-        # Generate all weight components
-        weights_list = []
+        # Create weights structure
+        weights = WeightsStructure()
         channel_dim_fn = lambda dims: 16 if dims[2] == 0 else 8
 
         # 1. Multiposteriors (for decoding layer)
-        multiposteriors = self.generate_multiposterior(h, multitensor_system, channel_dim_fn, 4)
-        weights_list.extend([w for mt in multiposteriors for w in self._flatten_multitensor(mt)])
+        weights.multiposteriors = self.generate_multiposterior(h, multitensor_system, channel_dim_fn, 4)
 
-        # 2. Decode weights (multilinear)
-        decode_weights = self.generate_multilinear(h, multitensor_system, channel_dim_fn, [4, channel_dim_fn])
-        weights_list.extend([w for mt in decode_weights for w in self._flatten_multitensor(mt)])
+        # 2. Decode weights (multilinear) with symmetrization
+        weights.decode_weights = self.generate_multilinear(h, multitensor_system, channel_dim_fn, [4, channel_dim_fn])
+        self.symmetrize_xy(weights.decode_weights, multitensor_system)
 
         # 3. Target capacities (multizeros)
-        target_capacities = self.generate_multizeros(h, multitensor_system, [4])
-        weights_list.extend([w for w in self._flatten_multitensor(target_capacities)])
+        weights.target_capacities = self.generate_multizeros(h, multitensor_system, [4])
 
         # 4-10. Layer weights (4 layers, each with 7 weight components)
         n_layers = 4
-        share_up_weights_list = []
-        share_down_weights_list = []
-        softmax_weights_list = []
-        cummax_weights_list = []
-        shift_weights_list = []
-        direction_share_weights_list = []
-        nonlinear_weights_list = []
-
         for layer_idx in range(n_layers):
             # Condition on layer index
             layer_emb = torch.cat([h, torch.tensor([layer_idx / n_layers], device=device)])
@@ -122,38 +128,32 @@ class HyperNetworkARC(nn.Module):
             direction_share = self.generate_multidirection_share(layer_emb, multitensor_system, channel_dim_fn)
             nonlinear = self.generate_multiresidual(layer_emb, multitensor_system, channel_dim_fn, 16, 16)
 
-            # Collect for symmetrization
-            share_up_weights_list.append(share_up)
-            share_down_weights_list.append(share_down)
-            softmax_weights_list.append(softmax)
-            cummax_weights_list.append(cummax)
-            shift_weights_list.append(shift)
-            direction_share_weights_list.append(direction_share)
-            nonlinear_weights_list.append(nonlinear)
-
-            # Add to flat weights_list
-            for mt in [share_up, share_down, softmax, cummax, shift, direction_share, nonlinear]:
-                weights_list.extend([w for w in self._flatten_multitensor(mt)])
+            # Add to weight structure
+            weights.share_up_weights.append(share_up)
+            weights.share_down_weights.append(share_down)
+            weights.softmax_weights.append(softmax)
+            weights.cummax_weights.append(cummax)
+            weights.shift_weights.append(shift)
+            weights.direction_share_weights.append(direction_share)
+            weights.nonlinear_weights.append(nonlinear)
 
         # 11. Head weights (linear head with symmetry)
-        head_weights = self.generate_head(h, multitensor_system, channel_dim_fn)
-        weights_list.extend([w for w in self._flatten_multitensor(head_weights)])
+        weights.head_weights = self.generate_head(h, multitensor_system, channel_dim_fn)
 
         # 12. Mask weights
-        mask_weights = self.generate_multilinear(h, multitensor_system, channel_dim_fn,
-                                                 [channel_dim_fn([1,0,0,1,0]), 2],
-                                                 specific_dims=[1,0,0,1,0])
-        weights_list.extend([w for w in self._flatten_multitensor(mask_weights)])
+        weights.mask_weights = self.generate_multilinear(h, multitensor_system, channel_dim_fn,
+                                                         [channel_dim_fn([1,0,0,1,0]), 2],
+                                                         specific_dims=[1,0,0,1,0])
 
         # Apply symmetrization (post-generation)
-        for weight_mt in [*share_up_weights_list, *share_down_weights_list, *softmax_weights_list,
-                          *cummax_weights_list, *shift_weights_list, *nonlinear_weights_list]:
+        for weight_mt in [*weights.share_up_weights, *weights.share_down_weights, *weights.softmax_weights,
+                          *weights.cummax_weights, *weights.shift_weights, *weights.nonlinear_weights]:
             self.symmetrize_xy(weight_mt, multitensor_system)
 
-        for direction_share_mt in direction_share_weights_list:
+        for direction_share_mt in weights.direction_share_weights:
             self.symmetrize_direction_sharing(direction_share_mt, multitensor_system)
 
-        return weights_list
+        return weights
 
     def _generate_tensor_chunked(self, h, head, numel, device):
         """

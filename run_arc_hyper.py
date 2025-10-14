@@ -2,7 +2,7 @@ import os
 import json
 import argparse
 from train_arc_hyper import train_single_task_hypernetwork
-from arc_primary_net import ARCPrimaryNetwork
+from primary_net_arc import ARCPrimaryNetwork
 import torch
 
 

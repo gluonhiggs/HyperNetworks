@@ -132,8 +132,8 @@ class ARCPrimaryNetwork(nn.Module):
         Complete forward pass for ARC task (matching CIFAR-10 pattern).
 
         This matches CIFAR-10's PrimaryNetwork.forward(images) but for ARC:
-            - CIFAR: net(images) → class predictions
-            - ARC: net(task, task_name) → pixel logits, masks, KL divergences
+            - CIFAR: w1 = self.zs[i](self.hope) → net(images) → class predictions
+            - ARC: weights = puzzle_emb(self.hypernetwork, task) → net(task) → pixel logits
 
         Args:
             task: Task object with puzzle data and metadata
@@ -149,115 +149,37 @@ class ARCPrimaryNetwork(nn.Module):
         # Get or create task-specific embedding
         puzzle_embedding = self.get_or_create_embedding(task_name)
 
-        # Generate weights from hypernetwork (like CIFAR-10's w1 = self.zs[i](self.hope))
-        device = puzzle_embedding.z.device
-        multitensor_system = task.multitensor_system
-        channel_dim_fn = self.channel_dim_fn
-
-        metadata = torch.tensor([
-            task.n_examples / 12.0,
-            task.n_colors / 9.0,
-            task.n_x / 30.0,
-            task.n_y / 30.0
-        ], dtype=torch.float32, device=device)
-
-        h = torch.cat([puzzle_embedding.z, metadata])
-        h = self.hypernetwork.body(h)
-
-        # Generate all weight components
-        multiposteriors = self.hypernetwork.generate_multiposterior(
-            h, multitensor_system, channel_dim_fn, 4
-        )
-
-        decode_weights = self.hypernetwork.generate_multilinear(
-            h, multitensor_system, channel_dim_fn, [4, channel_dim_fn]
-        )
-
-        target_capacities = self.hypernetwork.generate_multizeros(
-            h, multitensor_system, [4]
-        )
-
-        # Layer weights
-        share_up_weights = []
-        share_down_weights = []
-        softmax_weights = []
-        cummax_weights = []
-        shift_weights = []
-        direction_share_weights = []
-        nonlinear_weights = []
-
-        for layer_idx in range(self.n_layers):
-            layer_emb = torch.cat([h, torch.tensor([layer_idx / self.n_layers], device=device)])
-
-            share_up_weights.append(
-                self.hypernetwork.generate_multiresidual(layer_emb, multitensor_system, channel_dim_fn, 16, 16)
-            )
-            share_down_weights.append(
-                self.hypernetwork.generate_multiresidual(layer_emb, multitensor_system, channel_dim_fn, 8, 8)
-            )
-
-            def softmax_output_fn(dims):
-                return 2 * (2 ** (sum(dims[1:])) - 1)
-
-            softmax_weights.append(
-                self.hypernetwork.generate_multiresidual(layer_emb, multitensor_system, channel_dim_fn, 2, softmax_output_fn)
-            )
-            cummax_weights.append(
-                self.hypernetwork.generate_multiresidual(layer_emb, multitensor_system, channel_dim_fn, 4, 4)
-            )
-            shift_weights.append(
-                self.hypernetwork.generate_multiresidual(layer_emb, multitensor_system, channel_dim_fn, 4, 4)
-            )
-            direction_share_weights.append(
-                self.hypernetwork.generate_multidirection_share(layer_emb, multitensor_system, channel_dim_fn)
-            )
-            nonlinear_weights.append(
-                self.hypernetwork.generate_multiresidual(layer_emb, multitensor_system, channel_dim_fn, 16, 16)
-            )
-
-        head_weights = self.hypernetwork.generate_head(h, multitensor_system, channel_dim_fn)
-
-        mask_weights = self.hypernetwork.generate_multilinear(
-            h, multitensor_system, channel_dim_fn,
-            [channel_dim_fn([1, 0, 0, 1, 0]), 2],
-            specific_dims=[1, 0, 0, 1, 0]
-        )
-
-        # Apply symmetrization
-        for weight_list in [share_up_weights, share_down_weights, softmax_weights,
-                            cummax_weights, shift_weights, nonlinear_weights]:
-            for weights in weight_list:
-                self.hypernetwork.symmetrize_xy(weights, multitensor_system)
-
-        for weights in direction_share_weights:
-            self.hypernetwork.symmetrize_direction_sharing(weights, multitensor_system)
+        # Generate weights from hypernetwork (matching CIFAR-10: w1 = self.zs[i](self.hope))
+        weights = puzzle_embedding(self.hypernetwork, task)
 
         # Forward pass through ARCCompressor architecture (like CIFAR-10's ResNet blocks)
+        multitensor_system = task.multitensor_system
+
         # Decoding layer
         x, KL_amounts, KL_names = layers.decode_latents(
-            target_capacities, decode_weights, multiposteriors
+            weights.target_capacities, weights.decode_weights, weights.multiposteriors
         )
 
         # Transformer-like blocks
         for layer_num in range(self.n_layers):
-            x = layers.share_up(x, share_up_weights[layer_num])
-            x = layers.softmax(x, softmax_weights[layer_num], pre_norm=True, post_norm=False, use_bias=False)
-            x = layers.cummax(x, cummax_weights[layer_num], multitensor_system.task.masks,
+            x = layers.share_up(x, weights.share_up_weights[layer_num])
+            x = layers.softmax(x, weights.softmax_weights[layer_num], pre_norm=True, post_norm=False, use_bias=False)
+            x = layers.cummax(x, weights.cummax_weights[layer_num], multitensor_system.task.masks,
                             pre_norm=False, post_norm=True, use_bias=False)
-            x = layers.shift(x, shift_weights[layer_num], multitensor_system.task.masks,
+            x = layers.shift(x, weights.shift_weights[layer_num], multitensor_system.task.masks,
                            pre_norm=False, post_norm=True, use_bias=False)
-            x = layers.direction_share(x, direction_share_weights[layer_num], pre_norm=True, use_bias=False)
-            x = layers.nonlinear(x, nonlinear_weights[layer_num], pre_norm=True, post_norm=False, use_bias=False)
-            x = layers.share_down(x, share_down_weights[layer_num])
+            x = layers.direction_share(x, weights.direction_share_weights[layer_num], pre_norm=True, use_bias=False)
+            x = layers.nonlinear(x, weights.nonlinear_weights[layer_num], pre_norm=True, post_norm=False, use_bias=False)
+            x = layers.share_down(x, weights.share_down_weights[layer_num])
             x = layers.normalize(x)
 
         # Linear heads
         output = (
-            layers.affine(x[[1, 1, 0, 1, 1]], head_weights, use_bias=False)
-            + 100 * head_weights[[1, 1, 0, 1, 1]][1]
+            layers.affine(x[[1, 1, 0, 1, 1]], weights.head_weights, use_bias=False)
+            + 100 * weights.head_weights[[1, 1, 0, 1, 1]][1]
         )
-        x_mask = layers.affine(x[[1, 0, 0, 1, 0]], mask_weights, use_bias=True)
-        y_mask = layers.affine(x[[1, 0, 0, 0, 1]], mask_weights, use_bias=True)
+        x_mask = layers.affine(x[[1, 0, 0, 1, 0]], weights.mask_weights, use_bias=True)
+        y_mask = layers.affine(x[[1, 0, 0, 0, 1]], weights.mask_weights, use_bias=True)
 
         # Postprocessing
         x_mask, y_mask = layers.postprocess_mask(multitensor_system.task, x_mask, y_mask)
