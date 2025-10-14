@@ -131,10 +131,38 @@ pip install -r requirements.txt   # Install: torch==2.5.1, torchvision==0.20.1, 
 - Batch size is primary memory control
 
 ### Hypernetwork Development (In Progress)
-The repository is being extended to implement hypernetworks for CompressARC:
-- Goal: Learn puzzle embedding → weight mapping to share structure across puzzles
-- Expected approach: High-dim embedding (16-256) → linear map → network weights
-- See `COMPRESSARC.md` section "Joint Compression via Weight Sharing Between Puzzles"
+The repository is being extended to implement hypernetworks for CompressARC using a **meta-learning approach**:
+
+**Two Hypernetwork Paradigms:**
+1. **CIFAR-10 (Layer Embeddings)**: Fixed embeddings per layer → single network for all data → zero-shot inference
+2. **ARC (Task Embeddings)**: Separate embedding per task → different network per task → test-time adaptation required
+
+**ARC Meta-Learning Strategy:**
+- **Meta-training**: Train shared hypernetwork on all possible training tasks, learning good weight generation patterns
+- **Inference on new task**:
+  - Initialize random task embedding
+  - Generate initial weights via trained hypernetwork (structured, better than random)
+  - Optimize embedding via test-time adaptation using task's training examples
+  - Hypernetwork constrains search space and accelerates convergence
+
+**Key Differences from CIFAR-10:**
+- Embeddings represent **tasks** (not layers) and are **NOT shared** between different tasks
+- Each task is a completely different problem requiring task-specific weights
+- Test-time training unavoidable (cannot do zero-shot on novel ARC tasks)
+
+**Benefits over Original CompressARC:**
+- Fewer parameters to optimize during inference (embedding only vs all weights)
+- Better initialization from trained hypernetwork (learned inductive biases)
+- Faster convergence due to structured weight space
+- Improved final accuracy from meta-learned priors
+
+**Implementation Files:**
+- `hypernetwork_arc.py` - Generates ARCCompressor weights from embeddings + task metadata
+- `arc_primary_net.py` - End-to-end model (hypernetwork + task embeddings + architecture)
+- `train_arc_hyper.py` - Single-task training with hypernetwork
+- `run_arc_hyper.py` - Multi-task meta-training across 400 puzzles
+
+See `COMPRESSARC.md` section "Joint Compression via Weight Sharing Between Puzzles" and `README.md` (ARC hypernetworks) for details. Original CIFAR-10 implementation is documented in `README_CIFAR10.md`.
 
 ### Training Strategy (CompressARC)
 - No pretraining - random initialization
