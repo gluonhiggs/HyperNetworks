@@ -113,7 +113,7 @@ def train_single_task_hypernetwork(
         # For multi-epoch training, use MultiStepLR like CIFAR-10
         # Scale milestones proportionally to total iterations
         # CIFAR-10: 1M iters, milestones at [168k, 336k, 400k, 450k, 550k, 600k]
-        # ARC: ~2M iters (50 epochs × 400 tasks × 100 iters), scale accordingly
+        # ARC: ~10M iters (50 epochs × 2000 tasks × 100 iters), scale accordingly
         milestones = [
             int(total_iterations * 0.17),  # ~17% through training
             int(total_iterations * 0.34),  # ~34%

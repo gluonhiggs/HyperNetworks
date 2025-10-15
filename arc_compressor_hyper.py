@@ -105,11 +105,11 @@ class ARCCompressorHyper:
 
         # Regenerate components (matching hypernetwork order)
         self.multiposteriors = hypernetwork.generate_multiposterior(
-            h, multitensor_system, channel_dim_fn, 4
+            h, multitensor_system, 4
         )
 
         self.decode_weights = hypernetwork.generate_multilinear(
-            h, multitensor_system, channel_dim_fn, [4, channel_dim_fn]
+            h, multitensor_system, [4, channel_dim_fn]
         )
 
         self.target_capacities = hypernetwork.generate_multizeros(
@@ -129,35 +129,35 @@ class ARCCompressorHyper:
             layer_emb = torch.cat([h, torch.tensor([layer_idx / self.n_layers], device=device)])
 
             self.share_up_weights.append(
-                hypernetwork.generate_multiresidual(layer_emb, multitensor_system, channel_dim_fn, 16, 16)
+                hypernetwork.generate_multiresidual(layer_emb, multitensor_system, 16, 16, channel_dim_fn)
             )
             self.share_down_weights.append(
-                hypernetwork.generate_multiresidual(layer_emb, multitensor_system, channel_dim_fn, 8, 8)
+                hypernetwork.generate_multiresidual(layer_emb, multitensor_system, 8, 8, channel_dim_fn)
             )
 
             def softmax_output_fn(dims):
                 return 2 * (2 ** (sum(dims[1:])) - 1)
 
             self.softmax_weights.append(
-                hypernetwork.generate_multiresidual(layer_emb, multitensor_system, channel_dim_fn, 2, softmax_output_fn)
+                hypernetwork.generate_multiresidual(layer_emb, multitensor_system, 2, softmax_output_fn, channel_dim_fn)
             )
             self.cummax_weights.append(
-                hypernetwork.generate_multiresidual(layer_emb, multitensor_system, channel_dim_fn, 4, 4)
+                hypernetwork.generate_multiresidual(layer_emb, multitensor_system, 4, 4, channel_dim_fn)
             )
             self.shift_weights.append(
-                hypernetwork.generate_multiresidual(layer_emb, multitensor_system, channel_dim_fn, 4, 4)
+                hypernetwork.generate_multiresidual(layer_emb, multitensor_system, 4, 4, channel_dim_fn)
             )
             self.direction_share_weights.append(
                 hypernetwork.generate_multidirection_share(layer_emb, multitensor_system, channel_dim_fn)
             )
             self.nonlinear_weights.append(
-                hypernetwork.generate_multiresidual(layer_emb, multitensor_system, channel_dim_fn, 16, 16)
+                hypernetwork.generate_multiresidual(layer_emb, multitensor_system, 16, 16, channel_dim_fn)
             )
 
         self.head_weights = hypernetwork.generate_head(h, multitensor_system, channel_dim_fn)
 
         self.mask_weights = hypernetwork.generate_multilinear(
-            h, multitensor_system, channel_dim_fn,
+            h, multitensor_system,
             [channel_dim_fn([1, 0, 0, 1, 0]), 2],
             specific_dims=[1, 0, 0, 1, 0]
         )

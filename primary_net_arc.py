@@ -6,6 +6,47 @@ from hypernetwork_arc import HyperNetworkARC
 from pre_processing import Task
 
 
+class EmbeddingPredictor(nn.Module):
+    """
+    Predicts initial embedding from task metadata.
+
+    Learns the mapping: metadata → embedding space
+    Enables informed initialization for new tasks during meta-learning.
+    """
+    def __init__(self, emb_dim=128):
+        super().__init__()
+        self.metadata_dim = 4  # n_examples, n_colors, n_x, n_y
+
+        # MLP: metadata → embedding
+        self.predictor = nn.Sequential(
+            nn.Linear(self.metadata_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Linear(256, emb_dim)
+        )
+
+    def forward(self, task):
+        """
+        Predict embedding from task metadata.
+
+        Args:
+            task: Task object with metadata (n_examples, n_colors, n_x, n_y)
+
+        Returns:
+            predicted_embedding: [emb_dim] tensor
+        """
+        # Normalize metadata (same as hypernetwork)
+        metadata = torch.tensor([
+            task.n_examples / 12.0,
+            task.n_colors / 9.0,
+            task.n_x / 30.0,
+            task.n_y / 30.0
+        ], dtype=torch.float32, device=next(self.parameters()).device)
+
+        return self.predictor(metadata)
+
+
 class PuzzleEmbedding(nn.Module):
     """
     Puzzle embedding module for ARC tasks.
@@ -14,24 +55,30 @@ class PuzzleEmbedding(nn.Module):
     - Single z-vector per task (not multiple per layer)
     - forward() takes hypernetwork AND task (needs metadata)
     - Owns the embedding parameter
+    - IMPROVED: Can initialize from metadata predictor for better convergence
 
     Usage (similar to CIFAR-10):
         puzzle_emb = PuzzleEmbedding(emb_dim=128)
         weights_list = puzzle_emb(hypernetwork, task)
     """
 
-    def __init__(self, emb_dim=128, init_std=0.01):
+    def __init__(self, emb_dim=128, init_std=0.01, initial_embedding=None):
         """
         Initialize puzzle embedding.
 
         Args:
             emb_dim: Dimension of embedding vector
-            init_std: Standard deviation for random initialization
+            init_std: Standard deviation for random initialization (if initial_embedding=None)
+            initial_embedding: Optional pre-computed embedding (from EmbeddingPredictor)
         """
         super().__init__()
         self.emb_dim = emb_dim
-        # Single embedding vector (analogous to z in primary_net.py)
-        self.z = nn.Parameter(torch.randn(emb_dim) * init_std)
+
+        # Initialize from predictor (informed) or randomly (fallback)
+        if initial_embedding is not None:
+            self.z = nn.Parameter(initial_embedding.detach().clone())
+        else:
+            self.z = nn.Parameter(torch.randn(emb_dim) * init_std)
 
     def forward(self, hyper_net, task):
         """
@@ -88,39 +135,57 @@ class ARCPrimaryNetwork(nn.Module):
     shift_dim = 4
     nonlinear_dim = 16
 
-    def __init__(self, emb_dim=128):
+    def __init__(self, emb_dim=128, use_metadata_init=True):
         """
         Initialize ARC primary network (hypernetwork + embeddings + architecture).
 
         Args:
             emb_dim: Dimension of puzzle embeddings
+            use_metadata_init: If True, use metadata predictor for embedding initialization
         """
         super().__init__()
         self.emb_dim = emb_dim
+        self.use_metadata_init = use_metadata_init
 
         # Hypernetwork that generates all ARCCompressor weights from embeddings
         # (CIFAR-10 calls this self.hope, we use descriptive name)
         self.hypernetwork = HyperNetworkARC(emb_dim=emb_dim)
 
+        # Metadata → embedding predictor (meta-learned)
+        if use_metadata_init:
+            self.embedding_predictor = EmbeddingPredictor(emb_dim=emb_dim)
+        else:
+            self.embedding_predictor = None
+
         # Task embeddings (analogous to self.zs in primary_net.py)
         # ModuleDict allows saving/loading with state_dict()
         self.task_embeddings = nn.ModuleDict()
 
-    def get_or_create_embedding(self, task_name, init_std=0.01):
+    def get_or_create_embedding(self, task_name, task, init_std=0.01):
         """
-        Get embedding if exists, otherwise create new one.
+        Get embedding if exists, otherwise create new one (metadata-informed if available).
 
         Args:
             task_name: Name of the task
-            init_std: Standard deviation for random initialization if creating
+            task: Task object (for metadata-based initialization)
+            init_std: Standard deviation for random initialization (fallback)
 
         Returns:
             embedding: PuzzleEmbedding instance
         """
         if task_name not in self.task_embeddings:
-            self.task_embeddings[task_name] = PuzzleEmbedding(
-                emb_dim=self.emb_dim, init_std=init_std
-            )
+            # Use metadata predictor for informed initialization
+            if self.use_metadata_init and self.embedding_predictor is not None:
+                initial_embedding = self.embedding_predictor(task)
+                self.task_embeddings[task_name] = PuzzleEmbedding(
+                    emb_dim=self.emb_dim,
+                    initial_embedding=initial_embedding
+                )
+            else:
+                # Fallback to random initialization
+                self.task_embeddings[task_name] = PuzzleEmbedding(
+                    emb_dim=self.emb_dim, init_std=init_std
+                )
         return self.task_embeddings[task_name]
 
     def channel_dim_fn(self, dims):
@@ -146,8 +211,8 @@ class ARCPrimaryNetwork(nn.Module):
             KL_amounts: List of KL divergence contributions
             KL_names: List of names for KL components
         """
-        # Get or create task-specific embedding
-        puzzle_embedding = self.get_or_create_embedding(task_name)
+        # Get or create task-specific embedding (metadata-informed initialization)
+        puzzle_embedding = self.get_or_create_embedding(task_name, task)
 
         # Generate weights from hypernetwork (matching CIFAR-10: w1 = self.zs[i](self.hope))
         weights = puzzle_embedding(self.hypernetwork, task)

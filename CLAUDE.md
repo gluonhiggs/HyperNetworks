@@ -160,7 +160,7 @@ The repository is being extended to implement hypernetworks for CompressARC usin
 - `hypernetwork_arc.py` - Generates ARCCompressor weights from embeddings + task metadata
 - `arc_primary_net.py` - End-to-end model (hypernetwork + task embeddings + architecture)
 - `train_arc_hyper.py` - Single-task training with hypernetwork
-- `run_arc_hyper.py` - Multi-task meta-training across 400 puzzles
+- `run_arc_hyper.py` - Multi-task meta-training across all train puzzles
 
 See `COMPRESSARC.md` section "Joint Compression via Weight Sharing Between Puzzles" and `README.md` (ARC hypernetworks) for details. Original CIFAR-10 implementation is documented in `README_CIFAR10.md`.
 
