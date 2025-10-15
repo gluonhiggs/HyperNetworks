@@ -291,21 +291,22 @@ class HyperNetworkARC(nn.Module):
         return result
 
     def generate_multizeros(self, h, multitensor_system, shape_spec):
-        """Generate multizeros (small random initialization instead of hard zeros)."""
+        """Generate multizeros (actual zeros, matching original behavior)."""
         result = multitensor_system.make_multitensor()
         device = h.device
 
         for dims in multitensor_system:
+            # shape_spec can be a simple value (e.g., [4]) or a callable
+            # Original behavior: create zeros with this exact shape, NOT full multitensor shape
             shape_fn = shape_spec[0] if isinstance(shape_spec, list) else shape_spec
-            shape_val = shape_fn(dims) if callable(shape_fn) else shape_fn
-            shape = multitensor_system.shape(dims, shape_val)
+            shape = shape_fn(dims) if callable(shape_fn) else shape_fn
 
-            numel = int(np.prod(shape))
+            # Ensure shape is a list/tuple for torch.zeros
+            if isinstance(shape, int):
+                shape = [shape]
 
-            # Generate zeros using chunked generation (handles arbitrary sizes)
-            zeros_flat = self._generate_tensor_chunked(h, self.head_posterior, numel, device)
-            zeros = zeros_flat.reshape(shape) * 0.01
-            zeros = zeros.detach().requires_grad_(True)
+            # Generate actual zeros with the EXACT shape (not full multitensor shape)
+            zeros = torch.zeros(shape, device=device, requires_grad=True)
 
             result[dims] = zeros
 
@@ -361,14 +362,14 @@ class HyperNetworkARC(nn.Module):
         for dims in multitensor_system:
             if dims[3] == 0 and dims[4] == 1:
                 # Share weights between x and y dimensions
-                multiweights[dims] = multiweights[tuple(dims[:3] + [1, 0])]
+                multiweights[dims] = multiweights[dims[:3] + [1, 0]]
 
     def symmetrize_direction_sharing(self, multiweights, multitensor_system):
         """Ensure xy swap symmetry for directional communication layers."""
         for dims in multitensor_system:
             for dir1 in range(8):
                 for dir2 in range(8):
-                    from_dims = list(dims)
+                    from_dims = dims
                     from_dir1, from_dir2 = dir1, dir2
 
                     if dims[3] + dims[4] == 1:
@@ -392,7 +393,7 @@ class HyperNetworkARC(nn.Module):
                         if (from_dir2 - from_dir1) % 8 > 4:
                             from_dir2 = (8 + 2 * from_dir1 - from_dir2) % 8
 
-                    multiweights[tuple(dims)][dir1][dir2] = multiweights[tuple(from_dims)][from_dir1][from_dir2]
+                    multiweights[dims][dir1][dir2] = multiweights[from_dims][from_dir1][from_dir2]
 
     def _flatten_multitensor(self, multitensor):
         """Helper to flatten MultiTensor into list of tensors."""

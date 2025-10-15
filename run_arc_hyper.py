@@ -84,9 +84,24 @@ def meta_train_hypernetwork(
     else:
         print("Initializing new network")
 
-    # Store optimizer and scheduler per task (persist across epochs)
-    task_optimizers = {}
-    task_schedulers = {}
+    # Create ONE shared optimizer for entire network (matching CIFAR-10 pattern)
+    # This optimizer persists across ALL tasks and ALL epochs
+    optimizer = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.5, 0.9))
+
+    # MultiStepLR scheduler with milestones scaled to total iterations
+    # Total iterations = n_epochs × n_iterations_per_task × n_tasks
+    total_iterations = n_epochs * n_iterations_per_task * len(task_names)
+    milestones = [
+        int(total_iterations * 0.17),
+        int(total_iterations * 0.34),
+        int(total_iterations * 0.40),
+        int(total_iterations * 0.45),
+        int(total_iterations * 0.55),
+        int(total_iterations * 0.60),
+    ]
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.5)
+
+    print(f"Shared optimizer created: total_iters={total_iterations}, milestones={milestones}")
 
     # Multi-epoch training loop
     solutions = {}
@@ -97,31 +112,23 @@ def meta_train_hypernetwork(
             print(f"[Epoch {epoch+1}/{n_epochs}] Task {task_idx+1}/{len(task_names)}: {task_name}")
 
             try:
-                # Get persisted optimizer/scheduler (or None if first time)
-                task_optimizer = task_optimizers.get(task_name)
-                task_scheduler = task_schedulers.get(task_name)
-
-                # Train this task
-                total_iterations_for_task = n_epochs * n_iterations_per_task
-                solution, net, task_optimizer, task_scheduler = train_single_task_hypernetwork(
+                # Train this task using SHARED optimizer/scheduler
+                solution, net, _, _ = train_single_task_hypernetwork(
                     task_name=task_name,
                     split=split,
                     n_iterations=n_iterations_per_task,
-                    total_iterations=total_iterations_for_task,
+                    total_iterations=None,  # Don't create new scheduler in train_single_task_hypernetwork
                     emb_dim=emb_dim,
                     lr=lr,
                     freeze_hypernetwork=False,
                     net=net,
                     net_path=None,
-                    optimizer=task_optimizer,
-                    scheduler=task_scheduler,
+                    optimizer=optimizer,  # Shared optimizer
+                    scheduler=scheduler,  # Shared scheduler
                     save_net=False,
                     output_dir=output_dir
                 )
 
-                # Store optimizer/scheduler state for next epoch
-                task_optimizers[task_name] = task_optimizer
-                task_schedulers[task_name] = task_scheduler
                 solutions[task_name] = solution
 
             except Exception as e:
