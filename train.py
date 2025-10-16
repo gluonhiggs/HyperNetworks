@@ -40,26 +40,6 @@ def mask_select_logprobs(mask, length):
     log_partition = torch.logsumexp(logprobs, dim=0) if logprobs.numel() > 0 else torch.tensor(float('-inf'), device=mask.device)
 
     return log_partition, logprobs
-
-def plot_elbo_progress(train_history_logger, save_path='elbo_progress_final.png'):
-    """Plot ELBO progress during training."""
-    if not hasattr(train_history_logger, 'loss_curve') or len(train_history_logger.loss_curve) == 0:
-        print("Warning: No loss curve data found in train_history_logger")
-        return
-    
-    steps = np.arange(len(train_history_logger.loss_curve))
-    elbo = np.array(train_history_logger.loss_curve)
-    plt.figure(figsize=(10, 6))
-    plt.plot(steps, elbo, 'b-', label='ELBO', linewidth=2)
-    plt.xlabel('Training Steps')
-    plt.ylabel('ELBO')
-    plt.title('ELBO Progress During Training')
-    plt.grid(True, alpha=0.3)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=150, bbox_inches='tight')
-    plt.close()  # Cleanup
-    print(f"ELBO progress plot saved to: {save_path}")
     
 def take_step(task, model, optimizer, train_step, train_history_logger, total_steps, scheduler=None, scaler=None):
     """
@@ -84,15 +64,11 @@ def take_step(task, model, optimizer, train_step, train_history_logger, total_st
         logits = torch.cat([torch.zeros_like(logits[:,:1,:,:]), logits], dim=1)  # add black color to logits
         
 
-        # Custom cyclical annealing schedule for beta (weight on KL term)
-        M = total_steps // 100
-        R = 0.5  # Fraction of cycle for linear ramp-up
-        cycle_length = total_steps // M if M > 0 else 0
-        if cycle_length == 0:
-            beta = 1.0
-        else:
-            tau = (train_step % cycle_length) / cycle_length
-            beta = min(tau / R, 1.0)
+        # No beta annealing - use full KL weight for meta-training
+        # (Beta annealing is designed for long training runs like 2000 steps,
+        #  not needed for short 20-step meta-training iterations)
+        beta = 1.0
+
         # Compute the total KL loss
         total_KL = beta * sum(torch.sum(kl) for kl in KL_amounts)
 
@@ -170,18 +146,20 @@ def take_step(task, model, optimizer, train_step, train_history_logger, total_st
                 logprob = torch.logsumexp(max_coefficient*logprobs, dim=(0,1))/max_coefficient  # Aggregate for all possible grid sizes
                 reconstruction_error = reconstruction_error - logprob
             loss = total_KL + 10*reconstruction_error
-    if scheduler:
-        scaler.scale(loss).backward()  # AMP backward
-        scaler.step(optimizer)
-        scaler.update()
-        scheduler.step()
-    elif scaler:
+    # Handle combinations of scaler (AMP) and scheduler (LR annealing)
+    if scaler:
+        # Use AMP (rare - we disable this in train_arc_hyper.py)
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
+        if scheduler:
+            scheduler.step()
     else:
+        # No AMP (our case)
         loss.backward()
         optimizer.step()
+        if scheduler:
+            scheduler.step()
     # Performance recording
     train_history_logger.log(train_step,
                              logits,

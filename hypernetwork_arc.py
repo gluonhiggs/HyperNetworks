@@ -135,23 +135,23 @@ class HyperNetworkARC(nn.Module):
 
         # 4-10. Layer weights (4 layers, each with 7 weight components)
         n_layers = 4
-        for layer_idx in range(n_layers):
-            # Condition on layer index
-            layer_emb = torch.cat([h, torch.tensor([layer_idx / n_layers], device=device)])
+        for _ in range(n_layers):
+            # Note: We removed layer conditioning to fix dimension mismatch
+            # Position encoding in _generate_tensor_chunked already provides diversity
 
-            # Generate weights for this layer
-            share_up = self.generate_multiresidual(layer_emb, multitensor_system, 16, 16, channel_dim_fn)
-            share_down = self.generate_multiresidual(layer_emb, multitensor_system, 8, 8, channel_dim_fn)
+            # Generate weights for this layer using h directly (not layer_emb)
+            share_up = self.generate_multiresidual(h, multitensor_system, 16, 16, channel_dim_fn)
+            share_down = self.generate_multiresidual(h, multitensor_system, 8, 8, channel_dim_fn)
 
             # Softmax with dynamic output scaling
             def softmax_output_fn(dims):
                 return 2 * (2 ** (sum(dims[1:]) ) - 1)
-            softmax = self.generate_multiresidual(layer_emb, multitensor_system, 2, softmax_output_fn, channel_dim_fn)
+            softmax = self.generate_multiresidual(h, multitensor_system, 2, softmax_output_fn, channel_dim_fn)
 
-            cummax = self.generate_multiresidual(layer_emb, multitensor_system, 4, 4, channel_dim_fn)
-            shift = self.generate_multiresidual(layer_emb, multitensor_system, 4, 4, channel_dim_fn)
-            direction_share = self.generate_multidirection_share(layer_emb, multitensor_system, channel_dim_fn)
-            nonlinear = self.generate_multiresidual(layer_emb, multitensor_system, 16, 16, channel_dim_fn)
+            cummax = self.generate_multiresidual(h, multitensor_system, 4, 4, channel_dim_fn)
+            shift = self.generate_multiresidual(h, multitensor_system, 4, 4, channel_dim_fn)
+            direction_share = self.generate_multidirection_share(h, multitensor_system, channel_dim_fn)
+            nonlinear = self.generate_multiresidual(h, multitensor_system, 16, 16, channel_dim_fn)
 
             # Add to weight structure
             weights.share_up_weights.append(share_up)
@@ -165,10 +165,12 @@ class HyperNetworkARC(nn.Module):
         # 11. Head weights (linear head with symmetry)
         weights.head_weights = self.generate_head(h, multitensor_system, channel_dim_fn)
 
-        # 12. Mask weights
-        weights.mask_weights = self.generate_multilinear(h, multitensor_system,
-                                                         [channel_dim_fn([1,0,0,1,0]), 2],
-                                                         specific_dims=[1,0,0,1,0])
+        # 12. Mask weights (shared for both x and y masks, same as original ARCCompressor)
+        mask_weights_mt = self.generate_multilinear(h, multitensor_system,
+                                                    [channel_dim_fn([1,0,0,1,0]), 2],
+                                                    specific_dims=[1,0,0,1,0])
+        # Extract as simple list [weight, bias], NOT a MultiTensor
+        weights.mask_weights = mask_weights_mt[[1,0,0,1,0]]
 
         # Apply symmetrization (post-generation)
         for weight_mt in [*weights.share_up_weights, *weights.share_down_weights, *weights.softmax_weights,
@@ -353,9 +355,10 @@ class HyperNetworkARC(nn.Module):
         weight, bias = head_weights[dims]
         weight_sym = torch.stack([weight[:, 0]] * 2, dim=-1)
         weight_sym = weight_sym.detach().requires_grad_(True)
-        head_weights[dims] = [weight_sym, bias]
 
-        return head_weights
+        # Return as simple list [weight, bias], NOT a MultiTensor
+        # This matches what initialize_head returns in initializers.py
+        return [weight_sym, bias]
 
     def symmetrize_xy(self, multiweights, multitensor_system):
         """Ensure xy swap symmetry by sharing weights."""

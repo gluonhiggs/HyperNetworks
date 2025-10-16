@@ -1,200 +1,169 @@
 import os
 import json
-import argparse
-from train_arc_hyper import train_single_task_hypernetwork
-from primary_net_arc import ARCPrimaryNetwork
+import random
 import torch
+import torch.optim as optim
+
+from train_arc_hyper import train_single_task
+from primary_net_arc import ARCPrimaryNetwork
 
 
-def meta_train_hypernetwork(
-    split='training',
-    task_names=None,
-    max_tasks=None,
-    n_epochs=50,
-    n_iterations_per_task=100,
-    emb_dim=128,
-    lr=0.01,
-    output_dir='./hypernetwork_outputs',
-    save_interval=1
-):
-    """
-    Meta-train a shared hypernetwork across multiple ARC-AGI tasks.
-
-    Multi-epoch training strategy (avoids catastrophic forgetting):
-        1. Initialize ARCPrimaryNetwork (hypernetwork + embeddings, random or from checkpoint)
-        2. For each epoch:
-            a. For each task:
-                - Get/create task-specific embedding from net.task_embeddings
-                - Short optimization (100 iters) on this task
-                - Update both embedding and net.hypernetwork
-            b. Save checkpoint after epoch (net.state_dict() like CIFAR-10)
-        3. Hypernetwork learns cross-task weight generation patterns
-
-    This is analogous to CIFAR-10 training but with key differences:
-        - CIFAR: 1 batch (128 images) → 1 optimizer.step()
-        - ARC: 1 task (compression problem) → 100 optimizer.steps()
-        - Reason: Can't batch ARC tasks due to structural variability
-
-    Args:
-        split: Dataset split to use
-        task_names: List of task names (if None, loads all from split)
-        max_tasks: Maximum number of tasks to train (None = all)
-        n_epochs: Number of epochs through all tasks (default 50)
-        n_iterations_per_task: Training iterations per task per epoch (default 100)
-        emb_dim: Puzzle embedding dimension
-        lr: Learning rate (single LR for both embedding and hypernetwork, matching train_hyper.py)
-        output_dir: Directory for outputs
-        save_interval: Save checkpoint every N epochs (default 1)
-
-    Returns:
-        net: Trained ARCPrimaryNetwork (contains hypernetwork + embeddings)
-        solutions: Dict mapping task_name -> solution
-    """
-    print(f"\n{'='*60}\nMETA-TRAINING HYPERNETWORK")
-    print(f"Split: {split} | Epochs: {n_epochs} | Iters/task: {n_iterations_per_task}")
-    print(f"Embedding: {emb_dim}D | LR: {lr}\n{'='*60}")
-
-    # Setup
-    os.makedirs(output_dir, exist_ok=True)
-    device = torch.device('cuda')
-
-    # Load task list
+def load_tasks(split):
     data_dir = os.environ.get('ARC_DATA_DIR', 'dataset/')
     with open(f'{data_dir}/arc-agi_{split}_challenges.json', 'r') as f:
         problems = json.load(f)
+    return list(problems.keys())
 
-    if task_names is None:
-        task_names = list(problems.keys())
 
-    if max_tasks is not None:
-        task_names = task_names[:max_tasks]
+def validate(net, split, n_steps, max_tasks, emb_dim, lr):
+    data_dir = os.environ.get('ARC_DATA_DIR', 'dataset/')
 
-    print(f"\nTraining on {len(task_names)} tasks from {split} split")
+    challenges_path = f'{data_dir}/arc-agi_{split}_challenges.json'
+    solutions_path = f'{data_dir}/arc-agi_{split}_solutions.json'
 
-    # Initialize or load network
+    if not os.path.exists(challenges_path):
+        alt_data_dir = 'dataset_old/'
+        if os.path.exists(f'{alt_data_dir}/arc-agi_{split}_challenges.json'):
+            data_dir = alt_data_dir
+            challenges_path = f'{data_dir}/arc-agi_{split}_challenges.json'
+            solutions_path = f'{data_dir}/arc-agi_{split}_solutions.json'
+
+    with open(challenges_path, 'r') as f:
+        problems = json.load(f)
+    with open(solutions_path, 'r') as f:
+        solutions_gt = json.load(f)
+
+    task_names = list(problems.keys())[:max_tasks]
+
+    net.hypernetwork.requires_grad_(False)
+    if net.embedding_predictor:
+        net.embedding_predictor.requires_grad_(False)
+
+    n_correct_1 = 0
+    n_correct_2 = 0
+    n_total = 0
+
+    for task_name in task_names:
+        try:
+            optimizer = optim.AdamW(net.parameters(), lr=lr, betas=(0.5, 0.9), weight_decay=5e-4)
+            solution = train_single_task(task_name, split, n_steps, emb_dim, lr, net, optimizer, None, save_solution=True)
+
+            gt = solutions_gt[task_name]
+
+            solved_1 = all(solution[i]['attempt_1'] == gt[i] for i in range(len(solution)))
+            solved_2 = solved_1 or all(solution[i]['attempt_2'] == gt[i] for i in range(len(solution)))
+
+            if solved_1:
+                n_correct_1 += 1
+            if solved_2:
+                n_correct_2 += 1
+            n_total += 1
+        except:
+            continue
+
+    net.hypernetwork.requires_grad_(True)
+    if net.embedding_predictor:
+        net.embedding_predictor.requires_grad_(True)
+
+    pass_1 = 100.0 * n_correct_1 / n_total if n_total > 0 else 0.0
+    pass_2 = 100.0 * n_correct_2 / n_total if n_total > 0 else 0.0
+
+    print(f"\nValidation: Pass@1={pass_1:.2f}% ({n_correct_1}/{n_total}), Pass@2={pass_2:.2f}% ({n_correct_2}/{n_total})")
+
+    return {'pass@1': pass_1, 'pass@2': pass_2, 'n_correct_1': n_correct_1, 'n_correct_2': n_correct_2, 'n_total': n_total}
+
+
+if __name__ == '__main__':
+    emb_dim = 128
+    learning_rate = 0.02
+    min_learning_rate = 0.01
+    n_iterations_per_task = 20
+    output_dir = './hypernetwork_outputs'
+    validation_interval = 10
+    validation_steps = 800
+    validation_max_tasks = 20
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    task_names = load_tasks('training')
+    print(f"Training on {len(task_names)} tasks")
+    print("Training will continue until Ctrl+C. LR will reach 0.01 after ~50 epochs and stay there.")
+
+    net = ARCPrimaryNetwork(emb_dim=emb_dim).cuda()
+    optimizer = optim.AdamW(net.parameters(), lr=learning_rate, betas=(0.5, 0.9), weight_decay=1e-3)
+
+    iterations_per_epoch = n_iterations_per_task * len(task_names)
+    gamma = 0.8409
+    milestones = [
+        int(iterations_per_epoch * 7.5),
+        int(iterations_per_epoch * 15),
+        int(iterations_per_epoch * 22.5),
+        int(iterations_per_epoch * 30),
+    ]
+    lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
+
     checkpoint_path = os.path.join(output_dir, 'hypernetworks_arc.pth')
-    net = ARCPrimaryNetwork(emb_dim=emb_dim).to(device)
     start_epoch = 0
 
     if os.path.exists(checkpoint_path):
         checkpoint = torch.load(checkpoint_path)
         net.load_state_dict(checkpoint['net'])
         start_epoch = checkpoint.get('epoch', 0)
-        print(f"Resuming from epoch {start_epoch} | {len(net)} embeddings loaded")
-    else:
-        print("Initializing new network")
+        print(f"Resuming from epoch {start_epoch}")
 
-    # Create ONE shared optimizer for entire network (matching CIFAR-10 pattern)
-    # This optimizer persists across ALL tasks and ALL epochs
-    optimizer = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.5, 0.9))
+    best_accuracy = 0.0
+    validation_history = []
+    if os.path.exists(os.path.join(output_dir, 'validation_log.json')):
+        with open(os.path.join(output_dir, 'validation_log.json'), 'r') as f:
+            validation_history = json.load(f)
+            if validation_history:
+                best_accuracy = max(v['pass@2'] for v in validation_history)
 
-    # MultiStepLR scheduler with milestones scaled to total iterations
-    # Total iterations = n_epochs × n_iterations_per_task × n_tasks
-    total_iterations = n_epochs * n_iterations_per_task * len(task_names)
-    milestones = [
-        int(total_iterations * 0.17),
-        int(total_iterations * 0.34),
-        int(total_iterations * 0.40),
-        int(total_iterations * 0.45),
-        int(total_iterations * 0.55),
-        int(total_iterations * 0.60),
-    ]
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.5)
+    epoch = start_epoch
+    try:
+        while True:
+            epoch += 1
+            print(f"\nEpoch {epoch} (LR: {optimizer.param_groups[0]['lr']:.4f})")
 
-    print(f"Shared optimizer created: total_iters={total_iterations}, milestones={milestones}")
+            random.seed(42 + epoch)
+            epoch_tasks = task_names.copy()
+            random.shuffle(epoch_tasks)
 
-    # Multi-epoch training loop
-    solutions = {}
-    for epoch in range(start_epoch, n_epochs):
-        print(f"\n{'='*80}\nEPOCH {epoch+1}/{n_epochs}\n{'='*80}")
+            for task_idx, task_name in enumerate(epoch_tasks):
+                if (task_idx + 1) % 100 == 0:
+                    print(f"  Task {task_idx+1}/{len(task_names)}")
 
-        for task_idx, task_name in enumerate(task_names):
-            print(f"[Epoch {epoch+1}/{n_epochs}] Task {task_idx+1}/{len(task_names)}: {task_name}")
+                try:
+                    train_single_task(task_name, 'training', n_iterations_per_task, emb_dim, learning_rate,
+                                    net, optimizer, lr_scheduler, save_solution=False)
+                except Exception as e:
+                    print(f"  ERROR: {task_name}: {e}")
+                    continue
 
-            try:
-                # Train this task using SHARED optimizer/scheduler
-                solution, net, _, _ = train_single_task_hypernetwork(
-                    task_name=task_name,
-                    split=split,
-                    n_iterations=n_iterations_per_task,
-                    total_iterations=None,  # Don't create new scheduler in train_single_task_hypernetwork
-                    emb_dim=emb_dim,
-                    lr=lr,
-                    freeze_hypernetwork=False,
-                    net=net,
-                    net_path=None,
-                    optimizer=optimizer,  # Shared optimizer
-                    scheduler=scheduler,  # Shared scheduler
-                    save_net=False,
-                    output_dir=output_dir
-                )
+                if optimizer.param_groups[0]['lr'] < min_learning_rate:
+                    for param_group in optimizer.param_groups:
+                        param_group['lr'] = min_learning_rate
 
-                solutions[task_name] = solution
+            torch.save({'net': net.state_dict(), 'emb_dim': emb_dim, 'epoch': epoch}, checkpoint_path)
+            print(f"Saved checkpoint: epoch {epoch}")
 
-            except Exception as e:
-                print(f"ERROR: {task_name}: {e}")
-                continue
+            if validation_interval > 0 and epoch % validation_interval == 0:
+                print(f"\nValidating at epoch {epoch}...")
+                metrics = validate(net, 'evaluation', validation_steps, validation_max_tasks, emb_dim, 0.01)
 
-        # Save checkpoint after each epoch
-        if (epoch + 1) % save_interval == 0:
-            torch.save({
-                'net': net.state_dict(),
-                'emb_dim': emb_dim,
-                'epoch': epoch + 1,
-                'n_epochs': n_epochs,
-                'n_tasks': len(net)
-            }, checkpoint_path)
-            print(f"Checkpoint saved: epoch {epoch+1} | {len(net)} embeddings")
+                validation_history.append({'epoch': epoch, **metrics})
 
-    # Final save
-    print(f"\n{'='*60}\nTRAINING COMPLETE\n{'='*60}")
-    torch.save({
-        'net': net.state_dict(),
-        'emb_dim': emb_dim,
-        'epoch': n_epochs,
-        'n_epochs': n_epochs,
-        'n_tasks': len(net)
-    }, checkpoint_path)
+                with open(os.path.join(output_dir, 'validation_log.json'), 'w') as f:
+                    json.dump(validation_history, f, indent=2)
 
-    solutions_path = os.path.join(output_dir, 'all_solutions.json')
-    with open(solutions_path, 'w') as f:
-        json.dump(solutions, f, indent=2)
+                if metrics['pass@2'] > best_accuracy:
+                    best_accuracy = metrics['pass@2']
+                    torch.save({'net': net.state_dict(), 'emb_dim': emb_dim, 'epoch': epoch,
+                               'val_pass@1': metrics['pass@1'], 'val_pass@2': metrics['pass@2']},
+                              os.path.join(output_dir, 'best_model.pth'))
+                    print(f"New best model: {best_accuracy:.2f}%")
 
-    print(f"Network saved: {checkpoint_path} | {len(net)} embeddings")
-    print(f"Solutions saved: {solutions_path}")
-
-    return net, solutions
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Meta-train hypernetwork for ARC-AGI')
-    parser.add_argument('--resume', '-r', action='store_true', help='Resume from checkpoint')
-    args = parser.parse_args()
-
-    # Training configuration (hardcoded like train_hyper.py)
-    emb_dim = 128
-    learning_rate = 0.01
-    n_epochs = 50
-    n_iterations_per_task = 100
-    output_dir = './hypernetwork_outputs'
-    save_interval = 1
-
-    print("=" * 60)
-    print("ARC-AGI HYPERNETWORK TRAINING")
-    print(f"Embedding dim: {emb_dim}")
-    print(f"Learning rate: {learning_rate}")
-    print(f"Epochs: {n_epochs}, Iterations/task: {n_iterations_per_task}")
-    print("=" * 60)
-
-    # Meta-train on all training tasks
-    meta_train_hypernetwork(
-        split='training',  # Training data
-        task_names=None,   # All tasks
-        max_tasks=None,    # No limit
-        n_epochs=n_epochs,
-        n_iterations_per_task=n_iterations_per_task,
-        emb_dim=emb_dim,
-        lr=learning_rate,
-        output_dir=output_dir,
-        save_interval=save_interval
-    )
+    except KeyboardInterrupt:
+        print("\n\nTraining interrupted by user. Saving final checkpoint...")
+        torch.save({'net': net.state_dict(), 'emb_dim': emb_dim, 'epoch': epoch}, checkpoint_path)
+        print("Training stopped.")

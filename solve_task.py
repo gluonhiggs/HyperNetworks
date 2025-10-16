@@ -10,7 +10,6 @@ from torch.amp import GradScaler
 
 import pre_processing
 import train
-from train import plot_elbo_progress
 import arc_compressor
 import solution_selection
 import warnings
@@ -127,7 +126,6 @@ def solve_task(task_name, split, time_limit, n_train_iterations, gpu_id, memory_
                 sys.stdout.flush()
             if time.time() > time_limit:
                 break
-        # plot_elbo_progress(train_history_logger)
         # Get the solution
         example_list = []
         for example_num in range(task.n_test):

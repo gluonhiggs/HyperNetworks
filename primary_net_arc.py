@@ -241,7 +241,7 @@ class ARCPrimaryNetwork(nn.Module):
         # Linear heads
         output = (
             layers.affine(x[[1, 1, 0, 1, 1]], weights.head_weights, use_bias=False)
-            + 100 * weights.head_weights[[1, 1, 0, 1, 1]][1]
+            + 100 * weights.head_weights[1]  # head_weights is now [weight, bias]
         )
         x_mask = layers.affine(x[[1, 0, 0, 1, 0]], weights.mask_weights, use_bias=True)
         y_mask = layers.affine(x[[1, 0, 0, 0, 1]], weights.mask_weights, use_bias=True)
